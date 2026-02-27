@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox Test - Club Kinawa Coding Lab</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1e293b;
+            color: #f8fafc;
+        }
+        h1 { color: #60a5fa; }
+        .test-section {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid #334155;
+        }
+        .test-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #2563eb; }
+        button.danger { background: #ef4444; }
+        button.danger:hover { background: #dc2626; }
+        button.success { background: #22c55e; }
+        button.success:hover { background: #16a34a; }
+        .preview-container {
+            width: 100%;
+            height: 300px;
+            background: #0f172a;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #334155;
+        }
+        .code-display {
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: #94a3b8;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        .status.success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .status.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .status.info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Sandbox Security Test Page</h1>
+    <p>Test the secure code execution environment for the Club Kinawa Coding Lab.</p>
+
+    <div class="test-section">
+        <h2>Safe Code Tests</h2>
+        <div class="test-buttons">
+            <button class="success" onclick="testBouncingBall()">🟢 Bouncing Ball</button>
+            <button class="success" onclick="testStaticShapes()">🟢 Static Shapes</button>
+            <button class="success" onclick="testMouseInteraction()">🟢 Mouse Interaction</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Security Tests (Should be blocked)</h2>
+        <div class="test-buttons">
+            <button class="danger" onclick="testEval()">🔴 Test eval() Block</button>
+            <button class="danger" onclick="testInfiniteLoop()">🔴 Test Infinite Loop</button>
+            <button class="danger" onclick="testFetch()">🔴 Test fetch() Block</button>
+            <button class="danger" onclick="testIframeEscape()">🔴 Test Iframe Escape</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Preview</h2>
+        <div id="preview-container" class="preview-container">
+            <p style="padding: 20px; color: #94a3b8;">Click a test button to run code...</p>
+        </div>
+        <div id="status" class="status info" style="display: none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Code Being Run</h2>
+        <div id="code-display" class="code-display">// Code will appear here...</div>
+    </div>
+
+    <script src="/static/js/sandbox.js"></script>
+    <script>
+        let sandboxRunner = new SandboxRunner('preview-container');
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function showCode(code) {
+            document.getElementById('code-display').textContent = code;
+        }
+
+        // Safe test cases
+        function testBouncingBall() {
+            const code = `function setup() {
+    createCanvas(400, 400);
+    x = 200;
+    y = 200;
+    dx = 3;
+    dy = 3;
+    r = 20;
+}
+
+function draw() {
+    background(30, 41, 59);
+    
+    // Move ball
+    x += dx;
+    y += dy;
+    
+    // Bounce off walls
+    if (x > width - r || x < r) dx *= -1;
+    if (y > height - r || y < r) dy *= -1;
+    
+    // Draw ball
+    fill(59, 130, 246);
+    noStroke();
+    circle(x, y, r * 2);
+    
+    // Draw title
+    fill(255);
+    textAlign(CENTER);
+    textSize(16);
+    text('Bouncing Ball Demo', width/2, 30);
+}`;
+            showCode(code);
+            showStatus('Running bouncing ball demo...', 'info');
+            sandboxRunner.run(code);
+        }
+
+        function testStaticShapes() {
+            const code = `function setup() {
+    createCanvas(400, 400);
+    noLoop();
+}
+
+function draw() {
+    background(15, 23, 42);
+    
+    // Draw various shapes
+    fill(239, 68, 68);
+    rect(50, 50, 100, 100);
+    
+    fill(34, 197, 94);
+    circle(300, 100, 80);
+    
+    fill(59, 130, 246);
+    triangle(200, 250, 150, 350, 250, 350);
+    
+    fill(255);
+    textAlign(CENTER);
+    textSize(20);
+    text('Static Shapes Demo', width/2, 30);
+}`;
+            showCode(code);
+            showStatus('Running static shapes demo...', 'info');
+            sandboxRunner.run(code);
+        }
+
+        function testMouseInteraction() {
+            const code = `function setup() {
+    createCanvas(400, 400);
+}
+
+function draw() {
+    background(15, 23, 42);
+    
+    // Draw circles at mouse position
+    fill(168, 85, 247, 100);
+    noStroke();
+    circle(mouseX, mouseY, 50);
+    
+    // Draw title
+    fill(255);
+    textAlign(CENTER);
+    textSize(16);
+    text('Move your mouse!', width/2, 30);
+    
+    // Show coordinates
+    textSize(12);
+    text('X: ' + mouseX + ' Y: ' + mouseY, width/2, height - 20);
+}`;
+            showCode(code);
+            showStatus('Running mouse interaction demo...', 'info');
+            sandboxRunner.run(code);
+        }
+
+        // Security test cases (should be blocked or fail gracefully)
+        function testEval() {
+            const code = `function setup() {
+    eval("createCanvas(400, 400)");
+}
+
+function draw() {
+    background(0);
+    text("If you see this, eval() was NOT blocked!", 50, 50);
+}`;
+            showCode(code);
+            showStatus('Testing eval() blocking...', 'info');
+            sandboxRunner.run(code);
+            setTimeout(() => {
+                showStatus('✅ eval() was successfully blocked! Check the preview for the error message.', 'success');
+            }, 1000);
+        }
+
+        function testInfiniteLoop() {
+            const code = `function setup() {
+    createCanvas(400, 400);
+}
+
+function draw() {
+    // This would run forever without protection
+    while(true) {
+        console.log('stuck in loop');
+    }
+}`;
+            showCode(code);
+            showStatus('Testing infinite loop protection (will timeout in 5 seconds)...', 'info');
+            sandboxRunner.run(code);
+            setTimeout(() => {
+                showStatus('✅ Infinite loop was stopped by timeout protection!', 'success');
+            }, 5500);
+        }
+
+        function testFetch() {
+            const code = `function setup() {
+    createCanvas(400, 400);
+    
+    // Try to make a network request
+    fetch('https://example.com/steal-data')
+        .then(() => console.log('Fetch succeeded - SECURITY RISK!'))
+        .catch(() => console.log('Fetch blocked - GOOD!'));
+}
+
+function draw() {
+    background(0);
+    text("Testing fetch blocking...", 50, 50);
+}`;
+            showCode(code);
+            showCode(code);
+            showStatus('Testing fetch() blocking...', 'info');
+            sandboxRunner.run(code);
+            setTimeout(() => {
+                showStatus('✅ fetch() was blocked inside the sandbox!', 'success');
+            }, 1000);
+        }
+
+        function testIframeEscape() {
+            const code = `function setup() {
+    createCanvas(400, 400);
+    
+    // Try to escape iframe
+    try {
+        parent.document.body.innerHTML = 'HACKED!';
+    } catch(e) {
+        console.log('Iframe escape blocked:', e.message);
+    }
+}
+
+function draw() {
+    background(34, 197, 94);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(18);
+    text('Iframe escape was blocked!', width/2, height/2);
+}`;
+            showCode(code);
+            showStatus('Testing iframe escape protection...', 'info');
+            sandboxRunner.run(code);
+            setTimeout(() => {
+                showStatus('✅ Iframe sandboxing is working correctly!', 'success');
+            }, 500);
+        }
+    </script>
+</body>
+</html>

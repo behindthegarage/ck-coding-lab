@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Club Kinawa Coding Lab - Login</title>
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=2">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="logo">
+            <h1>🎮 Club Kinawa</h1>
+            <h2>Coding Lab</h2>
+        </div>
+        
+        <div class="login-form">
+            <h3>Log In</h3>
+            
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Your username" maxlength="50">
+            </div>
+            
+            <div class="form-group">
+                <label for="pin">PIN (4 digits)</label>
+                <input type="password" id="pin" placeholder="••••" maxlength="4" pattern="\d{4}">
+            </div>
+            
+            <button id="login-btn" class="btn-primary">Log In</button>
+            
+            <div id="error-message" class="error"></div>
+        </div>
+        
+        <p class="hint">Ask a staff member if you need help logging in!</p>
+    </div>
+    
+    <script src="/lab/static/js/auth.js"></script>
+</body>
+</html>

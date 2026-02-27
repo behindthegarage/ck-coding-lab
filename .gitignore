@@ -1,0 +1,32 @@
+# Database
+ckcl.db
+*.db
+
+# Logs
+logs/*.log
+logs/*.log.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+.env
+
+# Uploads
+uploads/*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System
+.DS_Store
+Thumbs.db
+
+# Gunicorn
+gunicorn.ctl

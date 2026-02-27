@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workspace - Club Kinawa Coding Lab</title>
+    <link rel="stylesheet" href="/lab/static/css/style.css">
+    <!-- p5.js for preview -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+</head>
+<body class="workspace-page">
+    <header class="app-header">
+        <div class="logo">
+            <a href="/lab/projects">← Back to Projects</a>
+        </div>
+        
+        <div class="project-title">
+            <h1 id="project-name">Loading...</h1>
+        </div>
+        
+        <div class="user-menu">
+            <button id="save-version-btn" class="btn-small">Save Version</button>
+            <button id="logout-btn" class="btn-small">Log Out</button>
+        </div>
+    </header>
+    
+    <main class="workspace-container">
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="chat">💬 Chat</button>
+            <button class="tab-btn" data-tab="code">📄 Code</button>
+            <button class="tab-btn" data-tab="preview">▶️ Preview</button>
+        </div>
+        
+        <!-- Tab Content -->
+        <div class="tab-content">
+            
+            <!-- Chat Tab -->
+            <div id="chat-tab" class="tab-pane active">
+                <div class="chat-container">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="chat-welcome">
+                            <p>👋 Welcome to your coding project!</p>
+                            <p>Describe what you want to build and I'll create it for you.</p>
+                            <p class="example">Try: "Make a game where a ball bounces around the screen"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-area">
+                        <div id="thinking-indicator" class="thinking hidden">
+                            <span class="spinner">⏳</span> Thinking...
+                        </div>
+                        
+                        <div class="input-row">
+                            <textarea id="chat-input" placeholder="Describe what you want to build..." rows="2"></textarea>
+                            <button id="send-btn" class="btn-primary">Send</button>
+                        </div>
+                        
+                        <div class="quick-actions">
+                            <button class="quick-btn" data-prompt="Make it faster">⚡ Faster</button>
+                            <button class="quick-btn" data-prompt="Add a score">🏆 Add Score</button>
+                            <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
+                            <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            
+            <!-- Code Tab -->
+            <div id="code-tab" class="tab-pane">
+                <div class="code-toolbar">
+                    <span class="code-label">JavaScript (read-only)</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="edit-mode">
+                        Enable Editing
+                    </label>
+                </div>
+                <pre id="code-display"><code class="language-javascript">// Your code will appear here...</code></pre>
+                <textarea id="code-editor" class="hidden"></textarea>
+            </div>
+            
+            
+            <!-- Preview Tab -->
+            <div id="preview-tab" class="tab-pane">
+                <div class="preview-toolbar">
+                    <button id="run-btn" class="btn-small">▶️ Run</button>
+                    <button id="fullscreen-btn" class="btn-small">⛶ Fullscreen</button>
+                </div>
+                <div id="preview-container">
+                    <p class="preview-placeholder">Your project preview will appear here.</p>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+    
+    <script src="/lab/static/js/auth.js?v=11"></script>
+    <script src="/lab/static/js/sandbox.js?v=11"></script>
+    <script src="/lab/static/js/workspace.js?v=11"></script>
+</body>
+</html>
