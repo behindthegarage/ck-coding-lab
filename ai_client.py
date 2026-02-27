@@ -388,7 +388,7 @@ class AIClient:
         
         # Extract code from markdown code block - more flexible pattern
         # Matches ``` followed by optional language, newline, content, newline, ```
-        code_pattern = r'```(?:\w+)?\s*\n(.*?)\n```'
+        code_pattern = r'```[\w]*(?:\s*\n|\s)([\s\S]*?)```'
         code_matches = re.findall(code_pattern, content, re.DOTALL)
         print(f"_parse_response: found {len(code_matches)} code blocks")
         
