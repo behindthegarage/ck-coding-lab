@@ -13,6 +13,7 @@ let project = null;
 let conversations = [];
 let currentCode = '';
 let sandboxRunner = null;
+let pendingUpload = null;
 
 // Load project data
 async function loadProject() {
@@ -42,13 +43,13 @@ function loadConversations() {
     const container = document.getElementById('chat-messages');
 
     if (conversations.length === 0) {
-        return; // Keep welcome message
+        return;
     }
 
     container.innerHTML = '';
 
     conversations.forEach(msg => {
-        if (msg.role === 'system') return; // Skip system messages
+        if (msg.role === 'system') return;
 
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${msg.role}`;
@@ -59,7 +60,6 @@ function loadConversations() {
                 <div class="message-meta">You</div>
             `;
         } else {
-            // Assistant message - parse for code and suggestions
             const parsed = parseAssistantMessage(msg.content);
             messageDiv.innerHTML = `
                 <div class="message-bubble">
@@ -79,7 +79,6 @@ function loadConversations() {
         container.appendChild(messageDiv);
     });
 
-    // Scroll to bottom
     container.scrollTop = container.scrollHeight;
 }
 
@@ -89,48 +88,54 @@ async function sendMessage(message) {
     const thinking = document.getElementById('thinking-indicator');
     const sendBtn = document.getElementById('send-btn');
 
-    // Clear input and show thinking
     input.value = '';
     thinking.classList.remove('hidden');
     sendBtn.disabled = true;
 
-    // Add user message to UI immediately
+    // Build message content
+    let messageContent = message;
+    if (pendingUpload) {
+        messageContent = `[Uploaded: ${pendingUpload.name}]\n\n${message}`;
+        if (pendingUpload.type === 'text') {
+            messageContent += `\n\nFile contents:\n\`\`\`\n${pendingUpload.content}\n\`\`\``;
+        } else if (pendingUpload.type === 'image') {
+            messageContent += `\n\n[Image attached: ${pendingUpload.name}]`;
+        }
+        pendingUpload = null;
+        document.getElementById('upload-preview').classList.add('hidden');
+        document.getElementById('upload-preview').textContent = '';
+    }
+
     const container = document.getElementById('chat-messages');
     const userMsg = document.createElement('div');
     userMsg.className = 'message user';
     userMsg.innerHTML = `
-        <div class="message-bubble">${escapeHtml(message)}</div>
+        <div class="message-bubble">${escapeHtml(messageContent)}</div>
         <div class="message-meta">You</div>
     `;
     container.appendChild(userMsg);
     container.scrollTop = container.scrollHeight;
 
-    // Remove welcome message if present
     const welcome = container.querySelector('.chat-welcome');
     if (welcome) welcome.remove();
 
-    // Call API
     const data = await apiRequest(`/projects/${projectId}/chat`, {
         method: 'POST',
-        body: { message, model: 'kimi-k2.5' }
+        body: { message: messageContent, model: 'kimi-k2.5' }
     });
 
-    // Hide thinking
     thinking.classList.add('hidden');
     sendBtn.disabled = false;
 
     if (data && data.success) {
-        // Update code
         if (data.response.code) {
             currentCode = data.response.code;
             updateCodeDisplay();
 
-            // Auto-switch to preview tab
             switchToTab('preview');
             runPreview();
         }
 
-        // Add assistant message to UI
         const assistantMsg = document.createElement('div');
         assistantMsg.className = 'message assistant';
         const suggestions = data.response.suggestions || [];
@@ -150,7 +155,6 @@ async function sendMessage(message) {
         container.appendChild(assistantMsg);
         container.scrollTop = container.scrollHeight;
     } else {
-        // Show error
         const errorMsg = document.createElement('div');
         errorMsg.className = 'message assistant';
         errorMsg.innerHTML = `
@@ -164,12 +168,51 @@ async function sendMessage(message) {
     }
 }
 
+// Handle file upload
+function handleFileUpload(file) {
+    if (!file) return;
+    
+    const maxSize = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > maxSize) {
+        alert('File too large. Max size is 5MB.');
+        return;
+    }
+    
+    const preview = document.getElementById('upload-preview');
+    
+    if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            pendingUpload = {
+                name: file.name,
+                type: 'image',
+                content: e.target.result // base64
+            };
+            preview.textContent = `📷 ${file.name}`;
+            preview.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    } else if (file.type === 'text/plain' || file.name.match(/\.(js|html|css|txt|json)$/)) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            pendingUpload = {
+                name: file.name,
+                type: 'text',
+                content: e.target.result
+            };
+            preview.textContent = `📄 ${file.name}`;
+            preview.classList.remove('hidden');
+        };
+        reader.readAsText(file);
+    } else {
+        alert('Unsupported file type. Please upload images, text files, or code files.');
+    }
+}
+
 // Update code display in code tab
 function updateCodeDisplay() {
     const display = document.getElementById('code-display');
     const editor = document.getElementById('code-editor');
-    
-    console.log("updateCodeDisplay: currentCode length:", currentCode ? currentCode.length : 0);
     
     display.textContent = currentCode || '// Your code will appear here...';
     editor.value = currentCode;
@@ -177,9 +220,6 @@ function updateCodeDisplay() {
 
 // Run code in preview
 function runPreview() {
-    console.log("runPreview called, code length:", currentCode ? currentCode.length : 0);
-    console.log("runPreview: currentCode preview:", currentCode ? currentCode.substring(0, 50) : 'empty');
-    
     const container = document.getElementById('preview-container');
     
     if (!container) {
@@ -187,24 +227,14 @@ function runPreview() {
         return;
     }
     
-    console.log("runPreview: container found, dimensions:", container.offsetWidth, "x", container.offsetHeight);
-    
     if (!currentCode) {
-        console.log("runPreview: no currentCode, showing placeholder");
         container.innerHTML = '<p class="preview-placeholder">Your project preview will appear here.</p>';
         return;
     }
     
-    // Get project language
     const language = (project && project.language) ? project.language : 'p5js';
-    console.log("runPreview: project language:", language);
     
-    // Always create a fresh sandbox runner to ensure clean state
-    console.log("runPreview: creating new SandboxRunner");
     sandboxRunner = new SandboxRunner('preview-container');
-    
-    // Run the code with language
-    console.log("runPreview: calling sandboxRunner.run() with language:", language);
     sandboxRunner.run(currentCode, language);
 }
 
@@ -216,67 +246,71 @@ function parseAssistantMessage(content) {
         suggestions: []
     };
 
-    // Extract code block
-    const codeMatch = content.match(/```(?:javascript|js)?\s*\n([\s\S]*?)\n```/);
+    const codeMatch = content.match(/```(?:javascript|js|html)?\s*\n([\s\S]*?)\n```/);
     if (codeMatch) {
         result.code = codeMatch[1].trim();
     }
 
-    // Get text before code block as explanation
     const beforeCode = content.split(/```/)[0].trim();
     result.explanation = beforeCode;
 
-    // Extract suggestions (bullet points after code)
-    const afterCode = content.split(/```[\s\S]*?```/)[1] || '';
-    const suggestionMatch = afterCode.match(/(?:[-*•]\s*(.+?)(?:\n|$))/g);
-    if (suggestionMatch) {
-        result.suggestions = suggestionMatch.map(s => s.replace(/^[-*•]\s*/, '').trim());
+    const afterCode = content.split(/```/).slice(-1)[0].trim();
+    if (afterCode) {
+        const lines = afterCode.split('\n').filter(l => l.trim().startsWith('-') || l.trim().startsWith('•'));
+        result.suggestions = lines.map(l => l.replace(/^[-•]\s*/, '').trim()).filter(l => l);
     }
 
     return result;
 }
 
-// Tab switching
-document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('tab-btn')) {
-        const tab = e.target.dataset.tab;
-        switchToTab(tab);
-    }
-});
-
-// Helper: Switch to a specific tab
+// Switch to a different tab
 function switchToTab(tabName) {
-    // Update active tab button
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
+        btn.classList.remove('active');
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+        }
     });
 
-    // Update active tab pane
     document.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.toggle('active', pane.id === `${tabName}-tab`);
+        pane.classList.remove('active');
+        if (pane.id === `${tabName}-tab`) {
+            pane.classList.add('active');
+        }
     });
 }
 
-// Helper: Escape HTML
+// Escape HTML for display
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// Helper: Format time
-function formatTime(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit'
-    });
+// Format timestamp
+function formatTime(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Initialize on page load
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    // Load project data
     loadProject();
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabName = btn.dataset.tab;
+            switchToTab(tabName);
+            
+            // Auto-focus preview when switching to preview tab
+            if (tabName === 'preview' && sandboxRunner) {
+                sandboxRunner.focus();
+            }
+        });
+    });
 
     // Chat input
     const chatInput = document.getElementById('chat-input');
@@ -284,8 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     sendBtn.addEventListener('click', () => {
         const message = chatInput.value.trim();
-        if (message) {
-            sendMessage(message);
+        if (message || pendingUpload) {
+            sendMessage(message || 'Please help with the uploaded file.');
         }
     });
 
@@ -304,6 +338,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // File upload
+    const uploadInput = document.getElementById('chat-upload');
+    if (uploadInput) {
+        uploadInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+    }
+
     // Code edit toggle
     const editToggle = document.getElementById('edit-mode');
     if (editToggle) {
@@ -315,7 +359,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 display.classList.add('hidden');
                 editor.classList.remove('hidden');
             } else {
-                // Save changes
                 currentCode = editor.value;
                 display.textContent = currentCode || '// Your code will appear here...';
                 display.classList.remove('hidden');
@@ -324,15 +367,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Run button
+    // Run button - focus now waits for iframe to load via sandboxRunner.focus()
     const runBtn = document.getElementById('run-btn');
     if (runBtn) {
         runBtn.addEventListener('click', () => {
             runPreview();
-            // Focus iframe after running
-            setTimeout(() => {
-                if (sandboxRunner) sandboxRunner.focus();
-            }, 100);
+            sandboxRunner.focus();
         });
     }
     
@@ -350,10 +390,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     previewContainer.msRequestFullscreen();
                 }
             }
-            // Focus iframe after fullscreen
-            setTimeout(() => {
-                if (sandboxRunner) sandboxRunner.focus();
-            }, 100);
+            if (sandboxRunner) {
+                sandboxRunner.focus();
+            }
         });
     }
 

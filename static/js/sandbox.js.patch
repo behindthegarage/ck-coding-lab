@@ -1,0 +1,102 @@
+--- a/static/js/sandbox.js
++++ b/static/js/sandbox.js
+@@ -37,6 +37,7 @@ class SandboxRunner {
+         // Create sandbox iframe
+         this.iframe = document.createElement('iframe');
+         this.iframe.style.width = '100%';
++        this.iframe.style.height = '100%';
+         this.iframe.style.border = 'none';
+         this.iframe.sandbox = 'allow-scripts allow-same-origin';
+         
+@@ -51,10 +52,16 @@ class SandboxRunner {
+         console.log("SandboxRunner: setting iframe srcdoc for HTML...");
+         this.iframe.srcdoc = htmlCode;
+         console.log("SandboxRunner: HTML iframe srcdoc set");
++        
++        // Track load state for focus callbacks
++        this.loaded = false;
++        this.onLoadCallbacks = [];
+         
+         // Auto-focus for keyboard input
+         this.iframe.onload = () => {
+             console.log("SandboxRunner: HTML iframe loaded, focusing...");
++            this.loaded = true;
++            this._runOnLoadCallbacks();
+             this.iframe.focus();
+             try {
+                 this.iframe.contentWindow.focus();
+@@ -77,6 +84,10 @@ class SandboxRunner {
+         this.iframe.sandbox = 'allow-scripts allow-same-origin';
+         
+         console.log("SandboxRunner: clearing container...");
++        
++        // Track load state for focus callbacks
++        this.loaded = false;
++        this.onLoadCallbacks = [];
+         this.container.innerHTML = '';
+         this.container.appendChild(this.iframe);
+         console.log("SandboxRunner: iframe appended to container");
+@@ -91,11 +102,22 @@ class SandboxRunner {
+         this.iframe.srcdoc = html;
+         console.log("SandboxRunner: iframe srcdoc set");
+         
+-        // Auto-focus for keyboard input
++        // Auto-focus for keyboard input after iframe loads
+         this.iframe.onload = () => {
+             console.log("SandboxRunner: p5.js iframe loaded, focusing...");
++            this.loaded = true;
++            this._runOnLoadCallbacks();
+             this.focus();
+         };
+         
+         // Listen for errors from iframe
+         window.addEventListener('message', this.handleMessage.bind(this));
++    }
++    
++    /**
++     * Execute callbacks once iframe is loaded
++     */
++    _runOnLoadCallbacks() {
++        while (this.onLoadCallbacks.length > 0) {
++            const cb = this.onLoadCallbacks.shift();
++            try { cb(); } catch (e) { console.error("OnLoad callback error:", e); }
++        }
++    }
++    
++    /**
++     * Register callback to run when iframe loads (or immediately if already loaded)
++     */
++    onReady(callback) {
++        if (this.loaded) {
++            try { callback(); } catch (e) { console.error("OnReady callback error:", e); }
++        } else {
++            this.onLoadCallbacks.push(callback);
++        }
+     }
+     
+     /**
+@@ -178,11 +200,15 @@ class SandboxRunner {
+      */
+     focus() {
+         if (this.iframe) {
+-            console.log("SandboxRunner: focusing iframe...");
++            console.log("SandboxRunner: focus() called, loaded=" + this.loaded);
+             this.iframe.focus();
+             try {
+                 this.iframe.contentWindow.focus();
+-                // Also try to focus the canvas if it exists (for p5.js games)
+-                const canvas = this.iframe.contentDocument?.querySelector('canvas');
++                // For p5.js games, focus the canvas or document body
++                const doc = this.iframe.contentDocument;
++                if (doc) {
++                    doc.body?.focus();
++                    const canvas = doc.querySelector('canvas');
+                 if (canvas) {
+                     canvas.focus();
+                     canvas.click(); // Some games need a click to capture input
++                    }
++                    // Dispatch a click on the body to ensure focus
++                    doc.body?.click();
+                 }
+             } catch (e) {
+                 // Cross-origin restrictions may prevent this
