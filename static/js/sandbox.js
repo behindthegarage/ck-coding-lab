@@ -168,92 +168,91 @@ class SandboxRunner {
             font-family: monospace;
             white-space: pre-wrap;
             max-width: 90%;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
     <div id="error-display"></div>
     <script>
-        // Wrap everything in try-catch for better error reporting
-        try {
-            // Track if we've successfully rendered
-            let firstFrameRendered = false;
-            let frameCount = 0;
-            const maxFrames = 100000;
-            
-            // Store original setup and draw
-            let userSetup = null;
-            let userDraw = null;
-            
-            // Override setup to catch errors
-            Object.defineProperty(window, 'setup', {
-                get: function() { return userSetup; },
-                set: function(fn) { 
-                    userSetup = function() {
-                        try {
-                            fn();
-                            parent.postMessage({type: 'setupComplete'}, '*');
-                        } catch (e) {
-                            console.error('Setup error:', e);
-                            showError('Setup Error: ' + e.message);
-                            parent.postMessage({type: 'error', message: 'Setup: ' + e.message}, '*');
-                        }
-                    };
-                }
-            });
-            
-            // Override draw to add frame limit and error handling
-            Object.defineProperty(window, 'draw', {
-                get: function() { return userDraw; },
-                set: function(fn) { 
-                    userDraw = function() {
-                        frameCount++;
-                        if (!firstFrameRendered) {
-                            firstFrameRendered = true;
-                            parent.postMessage({type: 'firstFrame'}, '*');
-                        }
-                        if (frameCount > maxFrames) {
-                            noLoop();
-                            showError('Stopped: too many frames (possible infinite loop)');
-                            parent.postMessage({type: 'error', message: 'Frame limit reached'}, '*');
-                            return;
-                        }
-                        try {
-                            fn();
-                        } catch (e) {
-                            console.error('Draw error:', e);
-                            showError('Draw Error (line ~' + frameCount + '): ' + e.message);
-                            parent.postMessage({type: 'error', message: 'Draw: ' + e.message}, '*');
-                        }
-                    };
-                }
-            });
-            
-            function showError(msg) {
-                const el = document.getElementById('error-display');
-                if (el) el.textContent = msg;
+        // Wrap user code execution in try-catch
+        (function() {
+            try {
+                ${escapedCode}
+            } catch (e) {
+                console.error('Code loading error:', e);
+                document.getElementById('error-display').textContent = 'Error loading code: ' + e.message;
+                parent.postMessage({type: 'error', message: 'Load: ' + e.message}, '*');
+                throw e;
+            }
+        })();
+        
+        // After user code loads, wrap the functions
+        (function() {
+            // Wrap setup if it exists
+            if (typeof setup === 'function' && !setup.__wrapped) {
+                const originalSetup = setup;
+                setup = function() {
+                    try {
+                        originalSetup();
+                        parent.postMessage({type: 'setupComplete'}, '*');
+                    } catch (e) {
+                        console.error('Setup error:', e);
+                        document.getElementById('error-display').textContent = 'Setup Error: ' + e.message;
+                        parent.postMessage({type: 'error', message: 'Setup: ' + e.message}, '*');
+                        throw e;
+                    }
+                };
+                setup.__wrapped = true;
             }
             
-            // Global error handler
-            window.onerror = function(msg, url, line, col, error) {
-                console.error('Global error:', msg, 'at', line);
-                showError('Error: ' + msg + (line ? ' (line ' + line + ')' : ''));
-                parent.postMessage({type: 'error', message: String(msg), line: line}, '*');
-                return true;
-            };
-            
-            // Block dangerous functions
-            window.eval = function() { throw new Error('eval is disabled'); };
-            window.Function = function() { throw new Error('Function constructor is disabled'); };
-            
-            // User code
-            ${escapedCode}
-            
-        } catch (e) {
-            console.error('Code loading error:', e);
-            document.getElementById('error-display').textContent = 'Error loading code: ' + e.message;
-            parent.postMessage({type: 'error', message: 'Load: ' + e.message}, '*');
-        }
+            // Wrap draw if it exists
+            if (typeof draw === 'function' && !draw.__wrapped) {
+                const originalDraw = draw;
+                let frameCount = 0;
+                const maxFrames = 100000;
+                let firstFrame = true;
+                
+                draw = function() {
+                    frameCount++;
+                    
+                    if (firstFrame) {
+                        firstFrame = false;
+                        parent.postMessage({type: 'firstFrame'}, '*');
+                    }
+                    
+                    if (frameCount > maxFrames) {
+                        noLoop();
+                        document.getElementById('error-display').textContent = 'Stopped: too many frames (possible infinite loop)';
+                        parent.postMessage({type: 'error', message: 'Frame limit reached'}, '*');
+                        return;
+                    }
+                    
+                    try {
+                        originalDraw();
+                    } catch (e) {
+                        console.error('Draw error:', e);
+                        document.getElementById('error-display').textContent = 'Draw Error: ' + e.message;
+                        parent.postMessage({type: 'error', message: 'Draw: ' + e.message}, '*');
+                        throw e;
+                    }
+                };
+                draw.__wrapped = true;
+            }
+        })();
+        
+        // Global error handler
+        window.onerror = function(msg, url, line, col, error) {
+            console.error('Sketch error:', msg, 'at line', line);
+            const el = document.getElementById('error-display');
+            if (el) el.textContent = 'Error: ' + msg + (line ? ' (line ' + line + ')' : '');
+            parent.postMessage({type: 'error', message: String(msg), line: line}, '*');
+            return true;
+        };
+        
+        // Block dangerous functions
+        window.eval = function() { throw new Error('eval is disabled'); };
+        window.Function = function() { throw new Error('Function constructor is disabled'); };
         
         // Auto-focus
         document.addEventListener('DOMContentLoaded', function() {
