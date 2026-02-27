@@ -190,7 +190,8 @@ class AIClient:
         message: str,
         conversation_history: Optional[List[Dict]],
         current_code: str,
-        language: str = "p5js"
+        language: str = "p5js",
+        model: str = "kimi-k2.5"
     ) -> Dict:
         """
         Generate code from a kid's natural language request.
@@ -200,6 +201,7 @@ class AIClient:
             conversation_history: Previous messages for context
             current_code: The current code in the project
             language: Which language mode ('p5js' or 'html')
+            model: Which AI model to use (default: kimi-k2.5)
             
         Returns:
             Dict with success, code, explanation, suggestions, full_response
