@@ -5,7 +5,7 @@ class SandboxRunner {
         this.container = document.getElementById(containerId);
         this.iframe = null;
         this.config = {
-            maxExecutionTime: 5000,  // Default 5s for simple sketches
+            maxExecutionTime: 5000,
             maxFrames: 100000,
             timeoutId: null,
             isWebGL: false
@@ -35,10 +35,10 @@ class SandboxRunner {
         // Detect WEBGL mode for longer timeout
         this.config.isWebGL = code.includes('WEBGL') || code.includes('webgl');
         if (this.config.isWebGL) {
-            this.config.maxExecutionTime = 15000;  // 15 seconds for WEBGL
+            this.config.maxExecutionTime = 15000;
             console.log("SandboxRunner: WEBGL detected, using 15s timeout");
         } else {
-            this.config.maxExecutionTime = 5000;  // 5 seconds for normal sketches
+            this.config.maxExecutionTime = 5000;
         }
         
         if (language === 'html' || looksLikeHTML) {
@@ -100,7 +100,6 @@ class SandboxRunner {
             this._doFocus();
         };
         
-        // Listen for messages from iframe (errors AND success)
         this._messageHandler = this.handleMessage.bind(this);
         window.addEventListener('message', this._messageHandler);
     }
@@ -146,12 +145,11 @@ class SandboxRunner {
     buildP5SandboxHTML(userCode) {
         // Escape user code to prevent breaking out of the script tag
         const escapedCode = userCode.replace(/<\/script>/gi, '<\\/script>');
-        const isWebGL = this.config.isWebGL;
         
         return `<!DOCTYPE html>
 <html>
 <head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"><\/script>
     <style>
         body { 
             margin: 0; 
@@ -171,108 +169,101 @@ class SandboxRunner {
             white-space: pre-wrap;
             max-width: 90%;
         }
-        #success-display {
-            color: #10b981;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-        }
     </style>
 </head>
 <body>
     <div id="error-display"></div>
     <script>
-        // Track if we've successfully rendered
-        let firstFrameRendered = false;
-        let frameCount = 0;
-        const maxFrames = 100000;
-        
-        // Error handling with better messages
-        window.onerror = function(msg, url, line, col, error) {
-            console.error('Sketch error:', msg, 'at line', line);
-            let errorMsg = 'Error: ' + msg;
-            if (line && line > 0) {
-                errorMsg += '\\nLine: ' + line;
-            }
-            document.getElementById('error-display').textContent = errorMsg;
-            parent.postMessage({type: 'error', message: msg, line: line}, '*');
-            return true;
-        };
-        
-        // Catch unhandled promise rejections
-        window.onunhandledrejection = function(event) {
-            console.error('Unhandled promise rejection:', event.reason);
-            parent.postMessage({type: 'error', message: 'Promise error: ' + event.reason}, '*');
-        };
-        
-        // Override p5.js setup to track successful initialization
-        const originalSetup = window.setup;
-        window.setup = function() {
-            try {
-                if (originalSetup) originalSetup();
-                // Notify parent that setup completed
-                parent.postMessage({type: 'setupComplete'}, '*');
-            } catch (e) {
-                console.error('Setup error:', e);
-                document.getElementById('error-display').textContent = 'Setup Error: ' + e.message;
-                parent.postMessage({type: 'error', message: 'Setup error: ' + e.message}, '*');
-            }
-        };
-        
-        // Override p5.js draw to add frame limit and track first frame
-        const originalDraw = window.draw;
-        window.draw = function() {
-            frameCount++;
-            
-            // Notify parent on first successful frame
-            if (!firstFrameRendered) {
-                firstFrameRendered = true;
-                parent.postMessage({type: 'firstFrame'}, '*');
-            }
-            
-            if (frameCount > maxFrames) {
-                noLoop();
-                console.warn('Sketch stopped: frame limit reached');
-                document.getElementById('error-display').textContent = 
-                    'Sketch stopped: too many frames (possible infinite loop)';
-                parent.postMessage({type: 'error', message: 'Frame limit reached'}, '*');
-                return;
-            }
-            
-            try {
-                if (originalDraw) originalDraw();
-            } catch (e) {
-                console.error('Draw error:', e);
-                document.getElementById('error-display').textContent = 'Draw Error: ' + e.message;
-                parent.postMessage({type: 'error', message: 'Draw error: ' + e.message}, '*');
-            }
-        };
-        
-        // Block dangerous globals
-        window.eval = function() { throw new Error('eval is disabled'); };
-        window.Function = function() { throw new Error('Function constructor is disabled'); };
-        
-        // User code
+        // Wrap everything in try-catch for better error reporting
         try {
+            // Track if we've successfully rendered
+            let firstFrameRendered = false;
+            let frameCount = 0;
+            const maxFrames = 100000;
+            
+            // Store original setup and draw
+            let userSetup = null;
+            let userDraw = null;
+            
+            // Override setup to catch errors
+            Object.defineProperty(window, 'setup', {
+                get: function() { return userSetup; },
+                set: function(fn) { 
+                    userSetup = function() {
+                        try {
+                            fn();
+                            parent.postMessage({type: 'setupComplete'}, '*');
+                        } catch (e) {
+                            console.error('Setup error:', e);
+                            showError('Setup Error: ' + e.message);
+                            parent.postMessage({type: 'error', message: 'Setup: ' + e.message}, '*');
+                        }
+                    };
+                }
+            });
+            
+            // Override draw to add frame limit and error handling
+            Object.defineProperty(window, 'draw', {
+                get: function() { return userDraw; },
+                set: function(fn) { 
+                    userDraw = function() {
+                        frameCount++;
+                        if (!firstFrameRendered) {
+                            firstFrameRendered = true;
+                            parent.postMessage({type: 'firstFrame'}, '*');
+                        }
+                        if (frameCount > maxFrames) {
+                            noLoop();
+                            showError('Stopped: too many frames (possible infinite loop)');
+                            parent.postMessage({type: 'error', message: 'Frame limit reached'}, '*');
+                            return;
+                        }
+                        try {
+                            fn();
+                        } catch (e) {
+                            console.error('Draw error:', e);
+                            showError('Draw Error (line ~' + frameCount + '): ' + e.message);
+                            parent.postMessage({type: 'error', message: 'Draw: ' + e.message}, '*');
+                        }
+                    };
+                }
+            });
+            
+            function showError(msg) {
+                const el = document.getElementById('error-display');
+                if (el) el.textContent = msg;
+            }
+            
+            // Global error handler
+            window.onerror = function(msg, url, line, col, error) {
+                console.error('Global error:', msg, 'at', line);
+                showError('Error: ' + msg + (line ? ' (line ' + line + ')' : ''));
+                parent.postMessage({type: 'error', message: String(msg), line: line}, '*');
+                return true;
+            };
+            
+            // Block dangerous functions
+            window.eval = function() { throw new Error('eval is disabled'); };
+            window.Function = function() { throw new Error('Function constructor is disabled'); };
+            
+            // User code
             ${escapedCode}
+            
         } catch (e) {
-            console.error('Code error:', e);
-            document.getElementById('error-display').textContent = 'Code Error: ' + e.message;
-            parent.postMessage({type: 'error', message: 'Code error: ' + e.message}, '*');
+            console.error('Code loading error:', e);
+            document.getElementById('error-display').textContent = 'Error loading code: ' + e.message;
+            parent.postMessage({type: 'error', message: 'Load: ' + e.message}, '*');
         }
         
-        // Auto-focus canvas for keyboard input
+        // Auto-focus
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
                 const canvas = document.querySelector('canvas');
-                if (canvas) {
-                    canvas.focus();
-                    canvas.click();
-                }
+                if (canvas) { canvas.focus(); canvas.click(); }
                 document.body.focus();
             }, 100);
         });
-    </script>
+    <\/script>
 </body>
 </html>`;
     }
@@ -282,9 +273,7 @@ class SandboxRunner {
         
         if (event.data.type === 'error') {
             console.error('Sandbox error:', event.data.message);
-            // Don't stop on errors - let the sketch continue if possible
         } else if (event.data.type === 'firstFrame') {
-            // Clear timeout on successful first frame
             console.log('SandboxRunner: First frame rendered, clearing timeout');
             if (this.config.timeoutId) {
                 clearTimeout(this.config.timeoutId);
