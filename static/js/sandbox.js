@@ -161,7 +161,10 @@ class SandboxRunner {
             min-height: 100vh; 
             background: #0f172a; 
         }
-        canvas { display: block; }
+        canvas { 
+            display: block; 
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+        }
         #error-display {
             color: #ef4444;
             padding: 20px;
@@ -170,15 +173,37 @@ class SandboxRunner {
             max-width: 90%;
             font-size: 14px;
         }
+        #debug-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: #10b981;
+            font-family: monospace;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 4px;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
     <div id="error-display"></div>
+    <div id="debug-info">Loading...</div>
     <script>
+        // Debug logging
+        let debugInfo = document.getElementById('debug-info');
+        function log(msg) {
+            console.log(msg);
+            if (debugInfo) debugInfo.textContent += '\\n' + msg;
+        }
+        
         // Wrap user code execution in try-catch
         (function() {
             try {
+                log('Loading user code...');
                 ${escapedCode}
+                log('User code loaded');
             } catch (e) {
                 console.error('Code loading error:', e);
                 document.getElementById('error-display').textContent = 'Error loading code: ' + e.message;
@@ -189,12 +214,16 @@ class SandboxRunner {
         
         // After user code loads, wrap the functions
         (function() {
+            log('Wrapping functions...');
+            
             // Wrap setup if it exists
             if (typeof setup === 'function' && !setup.__wrapped) {
                 const originalSetup = setup;
                 setup = function() {
                     try {
+                        log('setup() called');
                         originalSetup();
+                        log('setup() completed');
                         parent.postMessage({type: 'setupComplete'}, '*');
                     } catch (e) {
                         console.error('Setup error:', e);
@@ -204,6 +233,9 @@ class SandboxRunner {
                     }
                 };
                 setup.__wrapped = true;
+                log('setup() wrapped');
+            } else {
+                log('setup not found or already wrapped');
             }
             
             // Wrap draw if it exists
@@ -218,6 +250,7 @@ class SandboxRunner {
                     
                     if (firstFrame) {
                         firstFrame = false;
+                        log('First frame rendered');
                         parent.postMessage({type: 'firstFrame'}, '*');
                     }
                     
@@ -238,6 +271,9 @@ class SandboxRunner {
                     }
                 };
                 draw.__wrapped = true;
+                log('draw() wrapped');
+            } else {
+                log('draw not found or already wrapped');
             }
         })();
         
@@ -254,14 +290,7 @@ class SandboxRunner {
         window.eval = function() { throw new Error('eval is disabled'); };
         window.Function = function() { throw new Error('Function constructor is disabled'); };
         
-        // Auto-focus
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(function() {
-                const canvas = document.querySelector('canvas');
-                if (canvas) { canvas.focus(); canvas.click(); }
-                document.body.focus();
-            }, 100);
-        });
+        log('Sandbox initialized');
     <\/script>
 </body>
 </html>`;
