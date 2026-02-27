@@ -1149,3 +1149,32 @@ body {
 .upload-preview.hidden {
     display: none;
 }
+
+/* Project type badge styles */
+.project-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.project-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-p5js {
+    background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+    color: white;
+}
+
+.badge-html {
+    background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
+    color: white;
+}

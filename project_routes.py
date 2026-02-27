@@ -55,7 +55,7 @@ def list_projects():
     
     with get_db() as db:
         db.execute('''
-            SELECT id, name, description, created_at, updated_at, is_public, share_token
+            SELECT id, name, description, created_at, updated_at, is_public, share_token, language
             FROM projects
             WHERE user_id = ?
             ORDER BY updated_at DESC
@@ -150,24 +150,30 @@ def update_project(project_id):
         params = []
         
         if 'name' in data:
-            updates.append("name = ?")
-            params.append(data['name'].strip())
+            name = data['name'].strip()
+            if len(name) < 1 or len(name) > 100:
+                return jsonify({"success": False, "error": "Project name must be 1-100 characters"}), 400
+            updates.append('name = ?')
+            params.append(name)
         
         if 'description' in data:
-            updates.append("description = ?")
-            params.append(data['description'].strip())
+            description = data['description'].strip()
+            if len(description) > 500:
+                return jsonify({"success": False, "error": "Description must be under 500 characters"}), 400
+            updates.append('description = ?')
+            params.append(description)
         
         if not updates:
             return jsonify({"success": False, "error": "No fields to update"}), 400
         
-        updates.append("updated_at = CURRENT_TIMESTAMP")
+        updates.append('updated_at = CURRENT_TIMESTAMP')
         params.append(project_id)
-        params.append(user_id)
         
         db.execute(f'''
-            UPDATE projects SET {', '.join(updates)}
-            WHERE id = ? AND user_id = ?
-        ''', tuple(params))
+            UPDATE projects
+            SET {', '.join(updates)}
+            WHERE id = ?
+        ''', params)
         
         # Fetch updated project
         db.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
@@ -179,16 +185,17 @@ def update_project(project_id):
 @project_bp.route('/projects/<int:project_id>', methods=['DELETE'])
 @require_auth
 def delete_project(project_id):
-    """Delete a project."""
+    """Delete a project and all its data."""
     user_id = g.current_user['id']
     
     with get_db() as db:
+        # Verify ownership and delete
         db.execute('DELETE FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
         
         if db.rowcount == 0:
             return jsonify({"success": False, "error": "Project not found"}), 404
     
-    return jsonify({"success": True, "message": "Project deleted"})
+    return jsonify({"success": True})
 
 
 # ============ CHAT/AI ROUTES ============
@@ -213,9 +220,9 @@ def chat_with_ai(project_id):
         return jsonify({"success": False, "error": "Message too long (max 2000 chars)"}), 400
     
     with get_db() as db:
-        # Verify ownership and get current code
+        # Verify ownership and get current code AND language
         db.execute('''
-            SELECT id, current_code FROM projects WHERE id = ? AND user_id = ?
+            SELECT id, current_code, language FROM projects WHERE id = ? AND user_id = ?
         ''', (project_id, user_id))
         
         result = db.fetchone()
@@ -223,6 +230,7 @@ def chat_with_ai(project_id):
             return jsonify({"success": False, "error": "Project not found"}), 404
         
         current_code = result['current_code'] or ''
+        language = result['language'] or 'p5js'  # Default to p5js
         
         # Get conversation history for context
         db.execute('''
@@ -244,12 +252,13 @@ def chat_with_ai(project_id):
             VALUES (?, ?, ?)
         ''', (project_id, 'user', message))
     
-    # Call AI
+    # Call AI with the project's language
     ai = get_ai_client()
     result = ai.generate_code(
         message=message,
         conversation_history=conversation_history,
         current_code=current_code,
+        language=language,  # Pass the project language!
         model=model
     )
     
@@ -300,10 +309,11 @@ def save_version(project_id):
     """Save a named version of the current code."""
     user_id = g.current_user['id']
     data = request.get_json()
-    description = data.get('description', 'Manual save').strip()
+    
+    description = data.get('description', '').strip() if data else ''
     
     with get_db() as db:
-        # Get current code
+        # Verify ownership and get current code
         db.execute('''
             SELECT current_code FROM projects WHERE id = ? AND user_id = ?
         ''', (project_id, user_id))
@@ -312,27 +322,30 @@ def save_version(project_id):
         if not result:
             return jsonify({"success": False, "error": "Project not found"}), 404
         
-        code = result['current_code']
+        current_code = result['current_code'] or ''
+        
+        if not current_code:
+            return jsonify({"success": False, "error": "No code to save"}), 400
         
         # Save version
         db.execute('''
             INSERT INTO code_versions (project_id, code, description)
             VALUES (?, ?, ?)
-        ''', (project_id, code, description))
+        ''', (project_id, current_code, description))
         
         version_id = db.lastrowid
     
     return jsonify({
         "success": True,
         "version_id": version_id,
-        "message": "Version saved"
+        "description": description
     })
 
 
 @project_bp.route('/projects/<int:project_id>/versions', methods=['GET'])
 @require_auth
 def list_versions(project_id):
-    """List all saved versions of a project."""
+    """List all saved versions for a project."""
     user_id = g.current_user['id']
     
     with get_db() as db:
@@ -379,18 +392,33 @@ def get_version(project_id, version_id):
     return jsonify({"success": True, "version": version})
 
 
+# ============ SANDBOX VALIDATION ============
+
 @project_bp.route('/projects/<int:project_id>/validate', methods=['POST'])
 @require_auth
 def validate_code(project_id):
-    """Validate code for safety issues."""
+    """Validate code for security issues before running."""
+    user_id = g.current_user['id']
     data = request.get_json()
-    code = data.get('code', '')
     
+    if not data or 'code' not in data:
+        return jsonify({"success": False, "error": "Code is required"}), 400
+    
+    code = data['code']
+    language = data.get('language', 'p5js')
+    
+    # Verify ownership
+    with get_db() as db:
+        db.execute('SELECT id FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        if not db.fetchone():
+            return jsonify({"success": False, "error": "Project not found"}), 404
+    
+    # Validate code
     validator = CodeValidator()
-    is_valid, violations = validator.validate(code)
+    is_valid, issues = validator.validate(code, language)
     
     return jsonify({
         "success": True,
         "valid": is_valid,
-        "violations": violations
+        "issues": issues
     })

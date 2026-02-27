@@ -27,6 +27,10 @@ async function loadProject() {
 
     // Update UI
     document.getElementById('project-name').textContent = project.name;
+    
+    // Update project type badge and labels
+    updateProjectTypeUI(project.language);
+    
     updateCodeDisplay();
 
     // Load conversation history
@@ -35,6 +39,30 @@ async function loadProject() {
     // Run initial preview if there's code
     if (currentCode) {
         runPreview();
+    }
+}
+
+// Update UI based on project type (p5js or html)
+function updateProjectTypeUI(language) {
+    const badge = document.getElementById('project-type-badge');
+    const codeLabel = document.getElementById('code-type-label');
+    
+    if (language === 'html') {
+        if (badge) {
+            badge.textContent = '🌐 HTML';
+            badge.className = 'project-badge badge-html';
+        }
+        if (codeLabel) {
+            codeLabel.textContent = 'HTML/CSS/JS (read-only)';
+        }
+    } else {
+        if (badge) {
+            badge.textContent = '🎨 p5.js';
+            badge.className = 'project-badge badge-p5js';
+        }
+        if (codeLabel) {
+            codeLabel.textContent = 'JavaScript (read-only)';
+        }
     }
 }
 
@@ -367,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Run button - focus now waits for iframe to load via sandboxRunner.focus()
+    // Run button
     const runBtn = document.getElementById('run-btn');
     if (runBtn) {
         runBtn.addEventListener('click', () => {

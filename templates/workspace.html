@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace - Club Kinawa Coding Lab</title>
-    <link rel="stylesheet" href="/lab/static/css/style.css">
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=14">
     <!-- p5.js for preview -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
@@ -16,6 +16,7 @@
         
         <div class="project-title">
             <h1 id="project-name">Loading...</h1>
+            <span id="project-type-badge" class="project-badge">...</span>
         </div>
         
         <div class="user-menu">
@@ -78,7 +79,7 @@
             <!-- Code Tab -->
             <div id="code-tab" class="tab-pane">
                 <div class="code-toolbar">
-                    <span class="code-label">JavaScript (read-only)</span>
+                    <span class="code-label" id="code-type-label">JavaScript (read-only)</span>
                     <label class="toggle">
                         <input type="checkbox" id="edit-mode">
                         Enable Editing
