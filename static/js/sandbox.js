@@ -5,9 +5,10 @@ class SandboxRunner {
         this.container = document.getElementById(containerId);
         this.iframe = null;
         this.config = {
-            maxExecutionTime: 5000,
+            maxExecutionTime: 5000,  // Default 5s for simple sketches
             maxFrames: 100000,
-            timeoutId: null
+            timeoutId: null,
+            isWebGL: false
         };
         this.loaded = false;
         this.onLoadCallbacks = [];
@@ -30,6 +31,15 @@ class SandboxRunner {
         
         const trimmedCode = code.trim();
         const looksLikeHTML = trimmedCode.startsWith('<') || trimmedCode.startsWith('<!');
+        
+        // Detect WEBGL mode for longer timeout
+        this.config.isWebGL = code.includes('WEBGL') || code.includes('webgl');
+        if (this.config.isWebGL) {
+            this.config.maxExecutionTime = 15000;  // 15 seconds for WEBGL
+            console.log("SandboxRunner: WEBGL detected, using 15s timeout");
+        } else {
+            this.config.maxExecutionTime = 5000;  // 5 seconds for normal sketches
+        }
         
         if (language === 'html' || looksLikeHTML) {
             this.runHTML(code);
@@ -54,6 +64,7 @@ class SandboxRunner {
         this.iframe.srcdoc = htmlCode;
         
         this.iframe.onload = () => {
+            console.log("SandboxRunner: HTML iframe loaded");
             this.loaded = true;
             this._runOnLoadCallbacks();
             this._doFocus();
@@ -75,19 +86,23 @@ class SandboxRunner {
         this.container.innerHTML = '';
         this.container.appendChild(this.iframe);
         
+        // Set timeout for infinite loop protection
         this.config.timeoutId = setTimeout(() => {
-            this.stop('Execution timeout (infinite loop protection)');
+            this.stop('Execution timeout (infinite loop protection). Try refreshing or simplifying your code.');
         }, this.config.maxExecutionTime);
         
         this.iframe.srcdoc = html;
         
         this.iframe.onload = () => {
+            console.log("SandboxRunner: p5.js iframe loaded");
             this.loaded = true;
             this._runOnLoadCallbacks();
             this._doFocus();
         };
         
-        window.addEventListener('message', this.handleMessage.bind(this));
+        // Listen for messages from iframe (errors AND success)
+        this._messageHandler = this.handleMessage.bind(this);
+        window.addEventListener('message', this._messageHandler);
     }
     
     _doFocus() {
@@ -129,7 +144,9 @@ class SandboxRunner {
     }
     
     buildP5SandboxHTML(userCode) {
+        // Escape user code to prevent breaking out of the script tag
         const escapedCode = userCode.replace(/<\/script>/gi, '<\\/script>');
+        const isWebGL = this.config.isWebGL;
         
         return `<!DOCTYPE html>
 <html>
@@ -152,47 +169,99 @@ class SandboxRunner {
             padding: 20px;
             font-family: monospace;
             white-space: pre-wrap;
+            max-width: 90%;
+        }
+        #success-display {
+            color: #10b981;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
     <div id="error-display"></div>
     <script>
+        // Track if we've successfully rendered
+        let firstFrameRendered = false;
+        let frameCount = 0;
+        const maxFrames = 100000;
+        
+        // Error handling with better messages
         window.onerror = function(msg, url, line, col, error) {
             console.error('Sketch error:', msg, 'at line', line);
-            document.getElementById('error-display').textContent = 
-                'Error: ' + msg + '\\nLine: ' + line;
+            let errorMsg = 'Error: ' + msg;
+            if (line && line > 0) {
+                errorMsg += '\\nLine: ' + line;
+            }
+            document.getElementById('error-display').textContent = errorMsg;
             parent.postMessage({type: 'error', message: msg, line: line}, '*');
             return true;
         };
         
-        let frameCount = 0;
-        const maxFrames = 100000;
+        // Catch unhandled promise rejections
+        window.onunhandledrejection = function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            parent.postMessage({type: 'error', message: 'Promise error: ' + event.reason}, '*');
+        };
         
+        // Override p5.js setup to track successful initialization
+        const originalSetup = window.setup;
+        window.setup = function() {
+            try {
+                if (originalSetup) originalSetup();
+                // Notify parent that setup completed
+                parent.postMessage({type: 'setupComplete'}, '*');
+            } catch (e) {
+                console.error('Setup error:', e);
+                document.getElementById('error-display').textContent = 'Setup Error: ' + e.message;
+                parent.postMessage({type: 'error', message: 'Setup error: ' + e.message}, '*');
+            }
+        };
+        
+        // Override p5.js draw to add frame limit and track first frame
         const originalDraw = window.draw;
         window.draw = function() {
             frameCount++;
+            
+            // Notify parent on first successful frame
+            if (!firstFrameRendered) {
+                firstFrameRendered = true;
+                parent.postMessage({type: 'firstFrame'}, '*');
+            }
+            
             if (frameCount > maxFrames) {
                 noLoop();
                 console.warn('Sketch stopped: frame limit reached');
                 document.getElementById('error-display').textContent = 
-                    'Sketch stopped: too many frames';
+                    'Sketch stopped: too many frames (possible infinite loop)';
+                parent.postMessage({type: 'error', message: 'Frame limit reached'}, '*');
                 return;
             }
-            if (originalDraw) originalDraw();
+            
+            try {
+                if (originalDraw) originalDraw();
+            } catch (e) {
+                console.error('Draw error:', e);
+                document.getElementById('error-display').textContent = 'Draw Error: ' + e.message;
+                parent.postMessage({type: 'error', message: 'Draw error: ' + e.message}, '*');
+            }
         };
         
+        // Block dangerous globals
         window.eval = function() { throw new Error('eval is disabled'); };
         window.Function = function() { throw new Error('Function constructor is disabled'); };
         
+        // User code
         try {
             ${escapedCode}
         } catch (e) {
             console.error('Code error:', e);
-            document.getElementById('error-display').textContent = 
-                'Error: ' + e.message;
+            document.getElementById('error-display').textContent = 'Code Error: ' + e.message;
+            parent.postMessage({type: 'error', message: 'Code error: ' + e.message}, '*');
         }
         
+        // Auto-focus canvas for keyboard input
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
                 const canvas = document.querySelector('canvas');
@@ -209,8 +278,20 @@ class SandboxRunner {
     }
     
     handleMessage(event) {
-        if (event.data && event.data.type === 'error') {
+        if (!event.data) return;
+        
+        if (event.data.type === 'error') {
             console.error('Sandbox error:', event.data.message);
+            // Don't stop on errors - let the sketch continue if possible
+        } else if (event.data.type === 'firstFrame') {
+            // Clear timeout on successful first frame
+            console.log('SandboxRunner: First frame rendered, clearing timeout');
+            if (this.config.timeoutId) {
+                clearTimeout(this.config.timeoutId);
+                this.config.timeoutId = null;
+            }
+        } else if (event.data.type === 'setupComplete') {
+            console.log('SandboxRunner: Setup completed');
         }
     }
     
@@ -228,11 +309,13 @@ class SandboxRunner {
         if (reason) {
             this.container.innerHTML = `<div style="color: #ef4444; padding: 20px;">
                 <p>⚠️ ${reason}</p>
-                <p style="font-size: 0.875rem; color: #94a3b8;">Try simplifying your code.</p>
+                <p style="font-size: 0.875rem; color: #94a3b8;">Try refreshing the preview or simplifying your code.</p>
             </div>`;
         }
         
-        window.removeEventListener('message', this.handleMessage.bind(this));
+        if (this._messageHandler) {
+            window.removeEventListener('message', this._messageHandler);
+        }
     }
     
     focus() {
