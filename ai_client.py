@@ -35,6 +35,7 @@ You MUST generate p5.js code (setup(), draw(), etc.).
 - Suggest next steps or improvements
 - If they describe something complex, build a simple version first
 - Never use adult language or inappropriate content
+- Use correct p5.js key constants: UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW (not UP, DOWN, LEFT, RIGHT)
 
 ## Formatting Rules (Very Important!)
 
@@ -107,6 +108,7 @@ You MUST generate complete HTML documents with inline CSS and JavaScript.
 - Explain what you're doing in kid-friendly language
 - If they describe something complex, build a simple version first
 - Never use adult language or inappropriate content
+- Use correct p5.js key constants: UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW (not UP, DOWN, LEFT, RIGHT)
 
 ## Formatting Rules (Very Important!)
 
