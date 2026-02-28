@@ -1,0 +1,53 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block header %}Dashboard</h2>{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_users }}</div>
+        <div class="stat-label">Total Users</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_projects }}</div>
+        <div class="stat-label">Total Projects</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_conversations }}</div>
+        <div class="stat-label">AI Conversations</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.active_today }}</div>
+        <div class="stat-label">Active Today</div>
+    </div>
+</div>
+
+<div class="stats-grid" style="margin-top: 1rem;">
+    <div class="stat-card">
+        <div class="stat-value" style="color: #ff6b6b;">{{ stats.admin_count }}</div>
+        <div class="stat-label">Admins</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #4ecdc4;">{{ stats.kid_count }}</div>
+        <div class="stat-label">Kids</div>
+    </div>
+</div>
+
+<section style="margin-top: 3rem;">
+    <h3 style="color: #fff; margin-bottom: 1rem;">Quick Actions</h3>
+    <div style="display: flex; gap: 1rem;">
+        <a href="{{ url_for('admin.admin_add_user_form') }}" class="btn btn-primary">+ Add New User</a>
+        <a href="{{ url_for('admin.admin_users') }}" class="btn btn-secondary">Manage Users</a>
+        <a href="/lab/projects" class="btn btn-secondary">View Projects</a>
+    </div>
+</section>
+
+<section style="margin-top: 3rem;">
+    <h3 style="color: #fff; margin-bottom: 1rem;">System Status</h3>
+    <div style="background: #1a1a2e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333;">
+        <p style="color: #4caf50; margin: 0;">✅ All systems operational</p>
+        <p style="color: #888; margin-top: 0.5rem; font-size: 0.9rem;">Database: SQLite | API: Running | AI Client: Ready</p>
+    </div>
+</section>
+{% endblock %}

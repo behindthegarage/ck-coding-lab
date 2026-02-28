@@ -12,6 +12,7 @@ from database import init_db_full
 from auth import cleanup_expired_sessions
 from routes import auth_bp
 from project_routes import project_bp
+from admin_routes import admin_bp, api_admin_bp
 
 
 def create_app(test_config: dict = None) -> Flask:
@@ -52,6 +53,8 @@ def create_app(test_config: dict = None) -> Flask:
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(project_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(api_admin_bp)
     
     # Request hooks
     @app.before_request
@@ -86,6 +89,18 @@ def create_app(test_config: dict = None) -> Flask:
             return {'success': False, 'error': 'Internal server error'}, 500
         return 'Internal Server Error', 500
     
+    @app.errorhandler(403)
+    def forbidden(error):
+        if request.path.startswith('/api/'):
+            return {'success': False, 'error': 'Forbidden'}, 403
+        return 'Access Denied', 403
+    
+    @app.errorhandler(401)
+    def unauthorized(error):
+        if request.path.startswith('/api/'):
+            return {'success': False, 'error': 'Unauthorized'}, 401
+        return redirect('/lab/login')
+    
     @app.errorhandler(405)
     def method_not_allowed(error):
         if request.path.startswith('/api/'):
@@ -109,6 +124,7 @@ def create_app(test_config: dict = None) -> Flask:
             'endpoints': {
                 'auth': '/api/auth',
                 'projects': '/api/projects',
+                'admin': '/api/admin',
                 'health': '/api/auth/health'
             }
         }

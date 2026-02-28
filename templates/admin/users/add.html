@@ -1,0 +1,38 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}Add User{% endblock %}
+{% block header %}Add New User</h2>{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('admin.admin_create_user') }}" class="admin-form">
+    <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required 
+               minlength="3" maxlength="30" pattern="[a-zA-Z0-9_-]+"
+               value="{{ username or '' }}"
+               placeholder="e.g., johndoe">
+        <small style="color: #666;">3-30 characters, letters, numbers, underscores, hyphens only</small>
+    </div>
+    
+    <div class="form-group">
+        <label for="pin">PIN (4 digits)</label>
+        <input type="password" id="pin" name="pin" required 
+               minlength="4" maxlength="4" pattern="\d{4}"
+               placeholder="0000">
+        <small style="color: #666;">4-digit PIN for login</small>
+    </div>
+    
+    <div class="form-group">
+        <label for="role">Role</label>
+        <select id="role" name="role" required>
+            <option value="kid" {% if role == 'kid' %}selected{% endif %}">Kid (Student)</option>
+            <option value="admin" {% if role == 'admin' %}selected{% endif %}">Admin (Administrator)</option>
+        </select>
+    </div>
+    
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create User</button>
+        <a href="{{ url_for('admin.admin_users') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

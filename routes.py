@@ -229,11 +229,13 @@ def login():
     # Create session token
     token = create_session(user['id'])
     
-    return jsonify({
+    response = jsonify({
         'success': True,
         'token': token,
         'user': user
-    }), 200
+    })
+    response.set_cookie('auth_token', token, httponly=True, samesite='Lax', path='/', max_age=86400)
+    return response, 200
 
 
 @auth_bp.route('/logout', methods=['POST'])
@@ -254,9 +256,11 @@ def logout():
     token = g.auth_token
     invalidate_session(token)
     
-    return jsonify({
+    response = jsonify({
         'success': True
-    }), 200
+    })
+    response.delete_cookie('auth_token', path='/')
+    return response, 200
 
 
 @auth_bp.route('/register', methods=['POST'])

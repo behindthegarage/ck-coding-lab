@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin{% endblock %} - Club Kinawa Coding Lab</title>
+    <link rel="stylesheet" href="{{ url_for('serve_static', filename='css/style.css') }}">
+    <style>
+        /* Admin-specific styles */
+        .admin-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .admin-sidebar {
+            width: 220px;
+            background: #1a1a2e;
+            border-right: 1px solid #333;
+            padding: 1.5rem 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .admin-sidebar-header {
+            padding: 0 1.5rem 1.5rem;
+            border-bottom: 1px solid #333;
+            margin-bottom: 1rem;
+        }
+        
+        .admin-sidebar-header h1 {
+            font-size: 1.2rem;
+            margin: 0;
+            color: #fff;
+        }
+        
+        .admin-sidebar-header span {
+            color: #888;
+            font-size: 0.85rem;
+        }
+        
+        .admin-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .admin-nav li {
+            margin: 0;
+        }
+        
+        .admin-nav a {
+            display: block;
+            padding: 0.75rem 1.5rem;
+            color: #aaa;
+            text-decoration: none;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        
+        .admin-nav a:hover {
+            background: #252542;
+            color: #fff;
+        }
+        
+        .admin-nav a.active {
+            background: #252542;
+            color: #4fc3f7;
+            border-left-color: #4fc3f7;
+        }
+        
+        .admin-nav .icon {
+            display: inline-block;
+            width: 24px;
+            margin-right: 8px;
+        }
+        
+        .admin-main {
+            flex: 1;
+            margin-left: 220px;
+            padding: 2rem;
+            background: #0f0f1a;
+            min-height: 100vh;
+        }
+        
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #333;
+        }
+        
+        .admin-header h2 {
+            margin: 0;
+            color: #fff;
+        }
+        
+        .admin-user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .admin-user-info span {
+            color: #888;
+        }
+        
+        .btn-logout {
+            padding: 0.5rem 1rem;
+            background: #333;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .btn-logout:hover {
+            background: #444;
+        }
+        
+        /* Stats cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #4fc3f7;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card .stat-label {
+            color: #888;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Tables */
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1a2e;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .admin-table th,
+        .admin-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        
+        .admin-table th {
+            background: #252542;
+            font-weight: 600;
+            color: #aaa;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+        
+        .admin-table tr:hover {
+            background: #252542;
+        }
+        
+        .admin-table td {
+            color: #ccc;
+        }
+        
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .badge-admin {
+            background: #ff6b6b;
+            color: #fff;
+        }
+        
+        .badge-kid {
+            background: #4ecdc4;
+            color: #000;
+        }
+        
+        .badge-active {
+            background: #2ecc71;
+            color: #fff;
+        }
+        
+        .badge-inactive {
+            background: #95a5a6;
+            color: #fff;
+        }
+        
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        
+        .btn-primary {
+            background: #4fc3f7;
+            color: #000;
+        }
+        
+        .btn-primary:hover {
+            background: #29b6f6;
+        }
+        
+        .btn-secondary {
+            background: #333;
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background: #444;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: #fff;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.85rem;
+        }
+        
+        /* Forms */
+        .admin-form {
+            max-width: 500px;
+            background: #1a1a2e;
+            padding: 2rem;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #aaa;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            background: #0f0f1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 1rem;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        /* Flash messages */
+        .flash-messages {
+            margin-bottom: 1.5rem;
+        }
+        
+        .flash {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .flash-success {
+            background: #1e4620;
+            color: #4caf50;
+            border: 1px solid #2e7d32;
+        }
+        
+        .flash-error {
+            background: #4a1c1c;
+            color: #f44336;
+            border: 1px solid #c62828;
+        }
+        
+        /* Actions cell */
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="admin-layout">
+        <aside class="admin-sidebar">
+            <div class="admin-sidebar-header">
+                <h1>🔧 CKCL Admin</h1>
+                <span>Club Kinawa</span>
+            </div>
+            <nav>
+                <ul class="admin-nav">
+                    <li>
+                        <a href="{{ url_for('admin.admin_dashboard') }}" class="{% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}">
+                            <span class="icon">📊</span> Dashboard
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('admin.admin_users') }}" class="{% if request.endpoint and 'admin_users' in request.endpoint %}active{% endif %}">
+                            <span class="icon">👥</span> Users
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/lab/projects" class="">
+                            <span class="icon">💻</span> Projects
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+        
+        <main class="admin-main">
+            <header class="admin-header">
+                <h2>{% block header %}Admin Panel{% endblock %}</h2>
+                <div class="admin-user-info">
+                    <span>{{ g.current_user.username }} (Admin)</span>
+                    <a href="/lab" class="btn-logout">← Back to Lab</a>
+                </div>
+            </header>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1178,3 +1178,18 @@ body {
     background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
     color: white;
 }
+
+/* Admin link in header */
+#admin-link {
+    background: var(--primary);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+#admin-link:hover {
+    opacity: 0.9;
+}

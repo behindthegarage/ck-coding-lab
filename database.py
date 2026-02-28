@@ -39,6 +39,7 @@ def init_db(db_path: str = None) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             pin_hash TEXT NOT NULL,
+            role TEXT DEFAULT 'kid' CHECK (role IN ('admin', 'kid')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_active BOOLEAN DEFAULT 1,
             last_login TIMESTAMP
@@ -229,6 +230,49 @@ def migrate_v3_add_language(db_path: str = None) -> None:
     conn.close()
 
 
+def migrate_v4_admin_columns(db_path: str = None) -> None:
+    """
+    Migration: Add role column to users table for admin functionality.
+    
+    Adds:
+    - role: TEXT 'admin' or 'kid' (default 'kid')
+    - Ensures existing users have appropriate roles
+    """
+    if db_path is None:
+        db_path = DATABASE_PATH
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Check if role column exists
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [row[1] for row in cursor.fetchall()]
+    
+    if 'role' not in columns:
+        print("Adding role column to users table...")
+        cursor.execute('''
+            ALTER TABLE users
+            ADD COLUMN role TEXT DEFAULT 'kid' CHECK (role IN ('admin', 'kid'))
+        ''')
+        conn.commit()
+        print("Role column added successfully.")
+    else:
+        print("Role column already exists.")
+    
+    # Set admin user role
+    cursor.execute("UPDATE users SET role = 'admin' WHERE username = 'admin'")
+    if cursor.rowcount > 0:
+        print(f"Set {cursor.rowcount} admin user(s) to role 'admin'.")
+    
+    # Ensure all users without role are set to 'kid'
+    cursor.execute("UPDATE users SET role = 'kid' WHERE role IS NULL")
+    if cursor.rowcount > 0:
+        print(f"Set {cursor.rowcount} users to default role 'kid'.")
+    
+    conn.commit()
+    conn.close()
+
+
 def init_db_full(db_path: str = None) -> None:
     """
     Initialize complete database including all migrations.
@@ -239,3 +283,4 @@ def init_db_full(db_path: str = None) -> None:
     init_db(db_path)
     migrate_v2_projects_and_conversations(db_path)
     migrate_v3_add_language(db_path)
+    migrate_v4_admin_columns(db_path)

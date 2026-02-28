@@ -8,7 +8,14 @@ if (!isLoggedIn()) {
 let projects = [];
 let selectedLanguage = 'p5js';
 
-// Load projects from API
+// Show admin link if user is admin
+    const user = getCurrentUser();
+    if (user && user.role === "admin") {
+        const adminLink = document.getElementById("admin-link");
+        if (adminLink) adminLink.classList.remove("hidden");
+    }
+
+    // Load projects from API
 async function loadProjects() {
     const container = document.getElementById('projects-list');
     container.innerHTML = '<div class="loading">Loading your projects...</div>';
@@ -103,6 +110,13 @@ function formatDate(dateString) {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+    // Show admin link if user is admin
+    const user = getCurrentUser();
+    if (user && user.role === "admin") {
+        const adminLink = document.getElementById("admin-link");
+        if (adminLink) adminLink.classList.remove("hidden");
+    }
+
     // Load projects
     loadProjects();
 

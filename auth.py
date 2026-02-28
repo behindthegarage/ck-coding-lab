@@ -11,6 +11,8 @@ import bcrypt
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
+from functools import wraps
+from flask import request, jsonify, g
 from database import get_db, row_to_dict
 
 # Security configuration
@@ -36,6 +38,11 @@ class UserExistsError(AuthError):
 
 class InvalidCredentialsError(AuthError):
     """Raised when login credentials are invalid."""
+    pass
+
+
+class AdminRequiredError(AuthError):
+    """Raised when admin access is required but user is not admin."""
     pass
 
 
@@ -98,13 +105,28 @@ def validate_username(username: str) -> None:
         raise AuthError("Username can only contain letters, numbers, underscores, and hyphens")
 
 
-def create_user(username: str, pin: str) -> dict:
+def validate_role(role: str) -> None:
+    """
+    Validate role value.
+    
+    Args:
+        role: Role to validate ('admin' or 'kid')
+    
+    Raises:
+        AuthError: If role is invalid
+    """
+    if role not in ('admin', 'kid'):
+        raise AuthError("Role must be 'admin' or 'kid'")
+
+
+def create_user(username: str, pin: str, role: str = 'kid') -> dict:
     """
     Create a new user account with a 4-digit PIN.
     
     Args:
         username: Unique username for the kid
         pin: 4-digit PIN (will be hashed before storage)
+        role: User role ('admin' or 'kid', default 'kid')
     
     Returns:
         dict: User data excluding sensitive fields (pin_hash removed)
@@ -112,21 +134,22 @@ def create_user(username: str, pin: str) -> dict:
     Raises:
         InvalidPINError: If PIN format is invalid
         UserExistsError: If username already exists
-        AuthError: If username format is invalid
+        AuthError: If username format or role is invalid
     """
     # Validate inputs
     validate_username(username)
+    validate_role(role)
     pin_hash = hash_pin(pin)
     
     with get_db() as db:
         try:
             db.execute(
-                "INSERT INTO users (username, pin_hash) VALUES (?, ?)",
-                (username, pin_hash)
+                "INSERT INTO users (username, pin_hash, role) VALUES (?, ?, ?)",
+                (username, pin_hash, role)
             )
             # Get the created user
             db.execute(
-                "SELECT id, username, created_at, is_active, last_login FROM users WHERE username = ?",
+                "SELECT id, username, role, created_at, is_active, last_login FROM users WHERE username = ?",
                 (username,)
             )
             user = db.fetchone()
@@ -141,6 +164,7 @@ def create_user(username: str, pin: str) -> dict:
 def authenticate(username: str, pin: str) -> Optional[dict]:
     """
     Authenticate a user with username and PIN.
+    Only allows active users to login.
     
     Args:
         username: Username to authenticate
@@ -148,11 +172,10 @@ def authenticate(username: str, pin: str) -> Optional[dict]:
     
     Returns:
         dict: User data if authentication successful, None otherwise
-        Excludes sensitive pin_hash field from result
     """
     with get_db() as db:
         db.execute(
-            "SELECT id, username, pin_hash, created_at, is_active, last_login FROM users WHERE username = ? AND is_active = 1",
+            "SELECT id, username, pin_hash, role, created_at, is_active, last_login FROM users WHERE username = ? AND is_active = 1",
             (username,)
         )
         user = db.fetchone()
@@ -174,6 +197,7 @@ def authenticate(username: str, pin: str) -> Optional[dict]:
         return {
             'id': user['id'],
             'username': user['username'],
+            'role': user['role'],
             'created_at': user['created_at'],
             'is_active': user['is_active'],
             'last_login': user['last_login']
@@ -207,20 +231,20 @@ def create_session(user_id: int) -> str:
 def validate_session(token: str) -> Optional[dict]:
     """
     Validate a session token and return associated user.
+    Only returns active users.
     
     Args:
         token: Session token to validate
     
     Returns:
         dict: User data if token is valid and not expired, None otherwise
-        Excludes sensitive pin_hash field from result
     """
     if not token:
         return None
     
     with get_db() as db:
         db.execute('''
-            SELECT u.id, u.username, u.created_at, u.is_active, u.last_login,
+            SELECT u.id, u.username, u.role, u.created_at, u.is_active, u.last_login,
                    s.expires_at, s.created_at as session_created_at
             FROM sessions s
             JOIN users u ON s.user_id = u.id
@@ -274,8 +298,127 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
     """
     with get_db() as db:
         db.execute(
-            "SELECT id, username, created_at, is_active, last_login FROM users WHERE id = ?",
+            "SELECT id, username, role, created_at, is_active, last_login FROM users WHERE id = ?",
             (user_id,)
         )
         user = db.fetchone()
         return row_to_dict(user)
+
+
+def get_all_users() -> list:
+    """
+    Get all users (for admin use).
+    
+    Returns:
+        list: List of user dictionaries without pin_hash
+    """
+    with get_db() as db:
+        db.execute(
+            "SELECT id, username, role, created_at, is_active, last_login FROM users ORDER BY created_at DESC"
+        )
+        return [row_to_dict(row) for row in db.fetchall()]
+
+
+def update_user(user_id: int, **kwargs) -> Optional[dict]:
+    """
+    Update user fields.
+    
+    Args:
+        user_id: User ID to update
+        **kwargs: Fields to update (pin, role, is_active)
+    
+    Returns:
+        dict: Updated user data, or None if not found
+    """
+    allowed_fields = {'pin_hash', 'role', 'is_active'}
+    updates = {}
+    
+    if 'pin' in kwargs:
+        updates['pin_hash'] = hash_pin(kwargs['pin'])
+    if 'role' in kwargs:
+        validate_role(kwargs['role'])
+        updates['role'] = kwargs['role']
+    if 'is_active' in kwargs:
+        updates['is_active'] = 1 if kwargs['is_active'] else 0
+    
+    if not updates:
+        return get_user_by_id(user_id)
+    
+    with get_db() as db:
+        # Build update query
+        fields = ', '.join(f"{k} = ?" for k in updates.keys())
+        values = list(updates.values()) + [user_id]
+        
+        db.execute(f"UPDATE users SET {fields} WHERE id = ?", values)
+        
+        if db.rowcount > 0:
+            return get_user_by_id(user_id)
+        return None
+
+
+def delete_user(user_id: int) -> bool:
+    """
+    Soft delete a user by setting is_active to 0.
+    
+    Args:
+        user_id: User ID to delete
+    
+    Returns:
+        bool: True if user was found and deactivated
+    """
+    with get_db() as db:
+        db.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
+        return db.rowcount > 0
+
+
+# ============== DECORATORS ==============
+
+def require_auth(f):
+    """Decorator to require valid session token."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({"success": False, "error": "Missing or invalid authorization header"}), 401
+        
+        token = auth_header[7:]  # Remove "Bearer "
+        user = validate_session(token)
+        
+        if not user:
+            return jsonify({"success": False, "error": "Invalid or expired session"}), 401
+        
+        # Store user in flask g for route access
+        g.current_user = user
+        g.current_token = token
+        
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_admin(f):
+    """
+    Decorator to require admin role.
+    Must be used after @require_auth decorator.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({"success": False, "error": "Missing or invalid authorization header"}), 401
+        
+        token = auth_header[7:]  # Remove "Bearer "
+        user = validate_session(token)
+        
+        if not user:
+            return jsonify({"success": False, "error": "Invalid or expired session"}), 401
+        
+        # Check admin role
+        if user.get('role') != 'admin':
+            return jsonify({"success": False, "error": "Admin access required"}), 403
+        
+        # Store user in flask g for route access
+        g.current_user = user
+        g.current_token = token
+        
+        return f(*args, **kwargs)
+    return decorated
