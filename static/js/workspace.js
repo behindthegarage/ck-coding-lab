@@ -343,19 +343,18 @@ async function sendMessage(message) {
     const welcome = container.querySelector('.chat-welcome');
     if (welcome) welcome.remove();
 
-    const data = await apiRequest(`/projects/${projectId}/chat`, {
-        method: 'POST',
-        body: { 
-            message: messageContent, 
-            model: 'kimi-k2.5',
-            enable_tools: true
-        }
-    });
+    try {
+        const data = await apiRequest(`/projects/${projectId}/chat`, {
+            timeout: 120000,
+            method: 'POST',
+            body: { 
+                message: messageContent, 
+                model: 'kimi-k2.5',
+                enable_tools: true
+            }
+        });
 
-    thinking.classList.add('hidden');
-    sendBtn.disabled = false;
-
-    if (data && data.success) {
+        if (data && data.success) {
         if (data.response.code) {
             currentCode = data.response.code;
             updateCodeDisplay();
@@ -393,16 +392,32 @@ async function sendMessage(message) {
         container.appendChild(assistantMsg);
         container.scrollTop = container.scrollHeight;
     } else {
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'message assistant';
+            errorMsg.innerHTML = `
+                <div class="message-bubble" style="border-color: #ef4444;">
+                    <p>❌ Something went wrong. Please try again.</p>
+                    <p style="color: #94a3b8; font-size: 0.875rem;">${escapeHtml(data?.error || 'Unknown error')}</p>
+                </div>
+            `;
+            container.appendChild(errorMsg);
+            container.scrollTop = container.scrollHeight;
+        }
+    } catch (error) {
+        console.error('Error in sendMessage:', error);
         const errorMsg = document.createElement('div');
         errorMsg.className = 'message assistant';
         errorMsg.innerHTML = `
             <div class="message-bubble" style="border-color: #ef4444;">
-                <p>❌ Something went wrong. Please try again.</p>
-                <p style="color: #94a3b8; font-size: 0.875rem;">${escapeHtml(data?.error || 'Unknown error')}</p>
+                <p>❌ Network error or unexpected problem.</p>
+                <p style="color: #94a3b8; font-size: 0.875rem;">${escapeHtml(error.message || 'Please try again.')}</p>
             </div>
         `;
         container.appendChild(errorMsg);
         container.scrollTop = container.scrollHeight;
+    } finally {
+        thinking.classList.add('hidden');
+        sendBtn.disabled = false;
     }
 }
 
