@@ -420,6 +420,7 @@ class AIClient:
             
             # Process tool use if present
             tool_calls = []
+            tool_created_files = []
             final_content = response.get("content", "")
             
             if response.get("tool_calls") and project_id:
@@ -436,6 +437,13 @@ class AIClient:
                         "input": tool_input,
                         "result": tool_result
                     })
+                    
+                    # Track files created by write_file or append_file
+                    if tool_name in ["write_file", "append_file"] and tool_result.get("success"):
+                        tool_created_files.append({
+                            "filename": tool_input.get("filename", "unknown"),
+                            "action": tool_result.get("action", "created")
+                        })
                 
                 # Make a second call to get the AI's response after tool use
                 final_content = self._continue_after_tools(
@@ -446,6 +454,9 @@ class AIClient:
             # Extract code, explanation, suggestions, and file declarations from response
             parsed = self._parse_response(final_content, language, project_id)
             
+            # Combine files from tool calls and parsed text declarations
+            all_created_files = tool_created_files + parsed.get("created_files", [])
+            
             return {
                 "success": True,
                 "code": parsed["code"],
@@ -455,7 +466,7 @@ class AIClient:
                 "tokens_used": response.get("tokens_used", 0),
                 "model": "kimi-k2.5",
                 "tool_calls": tool_calls,
-                "created_files": parsed.get("created_files", [])
+                "created_files": all_created_files
             }
             
         except Exception as e:
