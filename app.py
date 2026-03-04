@@ -13,6 +13,7 @@ from auth import cleanup_expired_sessions
 from routes import auth_bp
 from project_routes import project_bp
 from admin_routes import admin_bp, api_admin_bp
+from file_routes import file_bp
 
 
 def create_app(test_config: dict = None) -> Flask:
@@ -55,6 +56,7 @@ def create_app(test_config: dict = None) -> Flask:
     app.register_blueprint(project_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_admin_bp)
+    app.register_blueprint(file_bp)
     
     # Request hooks
     @app.before_request
@@ -124,6 +126,7 @@ def create_app(test_config: dict = None) -> Flask:
             'endpoints': {
                 'auth': '/api/auth',
                 'projects': '/api/projects',
+                'files': '/api/projects/{id}/files',
                 'admin': '/api/admin',
                 'health': '/api/auth/health'
             }
