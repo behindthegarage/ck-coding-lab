@@ -22,151 +22,70 @@ from typing import List, Dict, Optional
 from datetime import datetime
 
 
-# System prompt for p5.js mode (games, animations)
-KID_CODING_PROMPT = """You are a coding assistant for kids ages 10-14. You're helping them build games and interactive projects using p5.js (JavaScript).
+# Language-specific context appended to agent.md
+LANGUAGE_CONTEXT = {
+    "p5js": """
+## CURRENT PROJECT: P5.JS
 
-## PROJECT TYPE: P5.JS
-You MUST generate p5.js code (setup(), draw(), etc.).
+You are helping with a p5.js project (JavaScript creative coding library).
 
-## Rules
-- Generate only p5.js code (setup(), draw(), etc.)
-- Keep code simple and well-commented
-- Explain what you're doing in kid-friendly language
-- Suggest next steps or improvements
-- If they describe something complex, build a simple version first
-- Never use adult language or inappropriate content
-- Use correct p5.js key constants: UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW (not UP, DOWN, LEFT, RIGHT)
+**p5.js specifics:**
+- Use `setup()` and `draw()` functions
+- `createCanvas(width, height)` in setup
+- Use p5.js key constants: UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW (not UP, DOWN, LEFT, RIGHT)
+- Available: all p5.js functions (circle, rect, fill, background, etc.)
 
-## Formatting Rules (Very Important!)
+**Output format:**
+Generate p5.js code in a markdown block. Brief explanation before, suggestions after.
+""",
+    "html": """
+## CURRENT PROJECT: HTML/CSS/JS
 
-**Use clean, scannable formatting with space between sections:**
+You are helping with an HTML project (web page or web game).
 
-**When asking questions, use this format:**
+**HTML specifics:**
+- Generate complete, valid HTML documents
+- Include CSS in <style> tags and JS in <script> tags
+- Or use external files if the project has multiple components
 
-🎮 **What's the main goal?**
-Collect things, reach the end, survive, defeat enemies, or solve puzzles?
+**Output format:**
+Generate HTML in a markdown block. Brief explanation before, suggestions after.
+""",
+    "python": """
+## CURRENT PROJECT: PYTHON
 
-🕹️ **Who or what do you control?**
-A character, vehicle, shape, or something else?
+You are helping with a Python project.
 
-## Output Format for Code Responses
+**Python specifics:**
+- Write clean, readable Python code
+- Use functions and classes appropriately
+- Include if __name__ == "__main__": block for runnable scripts
+- Use type hints where they add clarity (optional but helpful)
 
-1. **Brief explanation** (1-2 sentences)
-2. **Code block** with the full sketch
-3. **Ideas to try** (2-3 bulleted suggestions)
-
-Example code response:
-
-I created a bouncing ball for you! The ball moves around the screen and bounces off the edges.
-
-```javascript
-function setup() {
-  createCanvas(400, 400);
-}
-
-let x = 200;
-let y = 200;
-let xspeed = 3;
-let yspeed = 2;
-
-function draw() {
-  background(220);
-  
-  // Move the ball
-  x = x + xspeed;
-  y = y + yspeed;
-  
-  // Bounce off edges
-  if (x > width || x < 0) {
-    xspeed = xspeed * -1;
-  }
-  if (y > height || y < 0) {
-    yspeed = yspeed * -1;
-  }
-  
-  // Draw the ball
-  circle(x, y, 30);
-}
-```
-
-**What you could add:**
-• Make the ball change color when it bounces
-• Add a second ball
-• Make the ball speed up over time
+**Output format:**
+Generate Python code in a markdown block. Brief explanation before, suggestions after.
 """
+}
 
-# System prompt for HTML mode (websites, web games)
-HTML_CODING_PROMPT = """You are a coding assistant for kids ages 10-14. You're helping them build websites and web games using HTML, CSS, and JavaScript.
+UNDECIDED_CONTEXT = """
+## CURRENT PROJECT: NOT YET DECIDED
 
-## PROJECT TYPE: HTML
-You MUST generate complete HTML documents with inline CSS and JavaScript.
+The user hasn't chosen a language yet. This is the beginning of the project.
 
-## Rules
-- Generate complete, valid HTML documents (with <!DOCTYPE html>, <html>, <head>, <body>)
-- Include CSS in a <style> tag and JavaScript in a <script> tag
-- Keep code simple and well-commented
-- Explain what you're doing in kid-friendly language
-- If they describe something complex, build a simple version first
-- Never use adult language or inappropriate content
-- Use correct p5.js key constants: UP_ARROW, DOWN_ARROW, LEFT_ARROW, RIGHT_ARROW (not UP, DOWN, LEFT, RIGHT)
+**Your job:** Help them decide on the best technology stack for their idea.
 
-## Formatting Rules (Very Important!)
+**Questions to ask:**
+- What kind of project is this? (Game, website, tool, animation?)
+- Where should it run? (Browser, their computer, phone?)
+- Do they need to share it with others easily?
+- Is it visual or text-based?
 
-**Use clean, scannable formatting with space between sections:**
+**Options to present:**
+- **p5.js** — Games, animations, visual art. Runs in browser. Easy to share.
+- **HTML/CSS/JS** — Websites, web apps, interactive pages. Runs in browser. Most flexible.
+- **Python** — Scripts, data processing, text-based games. Runs on their computer. Great for learning programming concepts.
 
-## Output Format for Code Responses
-
-1. **Brief explanation** (1-2 sentences)
-2. **Code block** with the complete HTML document
-3. **Ideas to try** (2-3 bulleted suggestions)
-
-Example code response:
-
-I created a click counter for you! Click the button and the number goes up.
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Click Counter</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 50px;
-      background: #f0f0f0;
-    }
-    button {
-      font-size: 24px;
-      padding: 20px 40px;
-      cursor: pointer;
-    }
-    #count {
-      font-size: 48px;
-      margin: 20px;
-    }
-  </style>
-</head>
-<body>
-  <h1>Click Counter</h1>
-  <div id="count">0</div>
-  <button onclick="increment()">Click me!</button>
-  
-  <script>
-    let count = 0;
-    function increment() {
-      count = count + 1;
-      document.getElementById('count').textContent = count;
-    }
-  </script>
-</body>
-</html>
-```
-
-**What you could add:**
-• Make the button turn green after 10 clicks
-• Add a "reset" button
-• Show a celebration message at 50 clicks
+Once they choose (or you agree on a direction), start building with that choice.
 """
 
 
@@ -184,23 +103,46 @@ class AIClient:
         
         if not self.api_key:
             raise ValueError("KIMI_API_KEY environment variable is required")
+        
+        # Load agent.md system prompt
+        self.base_system_prompt = self._load_agent_prompt()
+    
+    def _load_agent_prompt(self) -> str:
+        """Load the agent.md system prompt."""
+        prompt_path = os.path.join(os.path.dirname(__file__), 'prompts', 'agent.md')
+        try:
+            with open(prompt_path, 'r') as f:
+                return f.read()
+        except FileNotFoundError:
+            print(f"Warning: agent.md not found at {prompt_path}, using default")
+            return "You are Hari, a helpful coding assistant."
+    
+    def _get_system_prompt(self, language: str) -> str:
+        """Build the full system prompt for a given language."""
+        base = self.base_system_prompt
+        if language == 'undecided' or not language:
+            return f"{base}\n\n{UNDECIDED_CONTEXT}"
+        print(f"DEBUG: Base prompt starts with: {base[:100]!r}")
+        lang_context = LANGUAGE_CONTEXT.get(language, LANGUAGE_CONTEXT["p5js"])
+        return f"{base}\n\n{lang_context}"
+        print(f"DEBUG: Base prompt starts with: {base[:100]!r}")
     
     def generate_code(
         self,
         message: str,
         conversation_history: Optional[List[Dict]],
         current_code: str,
-        language: str = "p5js",
+        language: str = "undecided",
         model: str = "kimi-k2.5"
     ) -> Dict:
         """
-        Generate code from a kid's natural language request.
+        Generate code from a user's natural language request.
         
         Args:
-            message: The kid's request
+            message: The user's request
             conversation_history: Previous messages for context
             current_code: The current code in the project
-            language: Which language mode ('p5js' or 'html')
+            language: Which language mode ('p5js', 'html', 'python', or 'undecided')
             model: Which AI model to use (default: kimi-k2.5)
             
         Returns:
@@ -244,18 +186,20 @@ class AIClient:
         message: str,
         conversation_history: Optional[List[Dict]],
         current_code: str,
-        language: str = "p5js"
+        language: str = "undecided"
     ):
         """Build the message list for the Kimi API (Anthropic Messages format)."""
-        # Select appropriate system prompt based on language
-        if language == "html":
-            system_content = HTML_CODING_PROMPT
-            code_lang = "html"
-        else:
-            system_content = KID_CODING_PROMPT
-            code_lang = "javascript"
+        # Get the full system prompt for this language
+        system_content = self._get_system_prompt(language)
         
-        # Anthropic format: system message is separate, not in messages array
+        # Map language to code block language identifier
+        code_lang_map = {
+            "p5js": "javascript",
+            "html": "html",
+            "python": "python"
+        }
+        code_lang = code_lang_map.get(language, "")
+        
         messages = []
         
         # Add context about current code if it exists
@@ -300,7 +244,7 @@ class AIClient:
                 "Content-Type": "application/json"
             }
             
-            print(f"Calling Kimi API at {self.base_url}/v1/messages")
+            print(f"DEBUG: System prompt length: {len(system_content)} chars"); print(f"Calling Kimi API at {self.base_url}/v1/messages")
             print(f"Messages count: {len(messages)}")
             
             response = requests.post(
@@ -342,13 +286,13 @@ class AIClient:
                 "error": str(e)
             }
     
-    def _parse_response(self, content: str, language: str = "p5js") -> Dict:
+    def _parse_response(self, content: str, language: str = "undecided") -> Dict:
         """
         Parse AI response to extract code, explanation, and suggestions.
         
         Args:
             content: The raw AI response text
-            language: 'p5js' or 'html' - affects which code blocks to look for
+            language: 'p5js', 'html', 'python', or 'undecided' - affects which code blocks to look for
             
         Returns:
             Dict with code, explanation, suggestions
@@ -362,22 +306,31 @@ class AIClient:
         print(f"_parse_response: content length {len(content)}")
         print(f"_parse_response: first 200 chars: {content[:200]!r}")
         
-        # More flexible code block extraction
-        # Matches ``` optionally followed by language, then content until ```
-        # Using re.DOTALL to match across newlines
-        code_patterns = [
-            r'```(?:javascript|js|html)?\s*\n(.*?)\n```',  # Standard markdown
-            r'```(?:javascript|js|html)?\s*\n(.*?)```',     # No newline before close
-            r'```\s*\n(.*?)\n```',                           # Any language
-            r'```\s*\n(.*?)```',                             # No newline before close
-        ]
+        # Map language to possible code block identifiers
+        lang_identifiers = {
+            "p5js": ["javascript", "js", ""],
+            "html": ["html", ""],
+            "python": ["python", "py", ""],
+            "undecided": ["javascript", "js", "html", "python", "py", ""]
+        }
+        identifiers = lang_identifiers.get(language, [""])
+        
+        # Build regex patterns for each identifier
+        code_patterns = []
+        for ident in identifiers:
+            if ident:
+                code_patterns.append(rf'```{ident}\s*\n(.*?)\n```')  # With newline before close
+                code_patterns.append(rf'```{ident}\s*\n(.*?)```')   # No newline before close
+            else:
+                code_patterns.append(r'```\s*\n(.*?)\n```')  # Any language
+                code_patterns.append(r'```\s*\n(.*?)```')    # No newline before close
         
         code_matches = []
         for pattern in code_patterns:
             matches = re.findall(pattern, content, re.DOTALL)
             if matches:
                 code_matches = matches
-                print(f"_parse_response: matched pattern: {pattern[:40]}...")
+                print(f"_parse_response: matched pattern")
                 break
         
         print(f"_parse_response: found {len(code_matches)} code blocks")
@@ -387,7 +340,6 @@ class AIClient:
             print(f"_parse_response: extracted code length {len(result['code'])}")
         
         # Get explanation - text before first code block
-        # Split on opening ``` 
         parts = re.split(r'```(?:\w+)?\s*\n?', content, maxsplit=1, flags=re.DOTALL)
         if parts:
             result["explanation"] = parts[0].strip()
@@ -395,11 +347,9 @@ class AIClient:
         
         # Extract suggestions from text after code block
         if len(parts) > 1:
-            # Get everything after the code block
             after_code_parts = content.split('```')
             if len(after_code_parts) >= 3:
-                # content is: before ``` code ``` after
-                after_code = ''.join(after_code_parts[2:])  # Everything after second ```
+                after_code = ''.join(after_code_parts[2:])
                 print(f"_parse_response: after_code length {len(after_code)}")
                 
                 # Look for suggestions - various patterns
@@ -412,7 +362,7 @@ class AIClient:
                     match = re.search(pattern, after_code, re.IGNORECASE | re.DOTALL)
                     if match:
                         suggestions_text = match.group(1)
-                        print(f"_parse_response: found suggestions with pattern")
+                        print(f"_parse_response: found suggestions")
                         suggestions = re.findall(r'[-*•\d.]\s*(.*?)(?=\n[-*•\d.]|\Z)', suggestions_text, re.DOTALL)
                         result["suggestions"] = [s.strip() for s in suggestions if s.strip()]
                         break

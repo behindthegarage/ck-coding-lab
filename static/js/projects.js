@@ -6,7 +6,7 @@ if (!isLoggedIn()) {
 }
 
 let projects = [];
-let selectedLanguage = 'p5js';
+let selectedLanguage = 'undecided';
 
 // Show admin link if user is admin
     const user = getCurrentUser();
@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('project-name').value = '';
         document.getElementById('project-desc').value = '';
         document.getElementById('project-error').textContent = '';
-        selectedLanguage = 'p5js';
+        selectedLanguage = 'undecided';
         document.querySelectorAll('.lang-pick').forEach(b => {
             b.classList.toggle('active', b.dataset.lang === 'p5js');
         });

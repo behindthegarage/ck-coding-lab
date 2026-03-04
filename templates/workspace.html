@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace - Club Kinawa Coding Lab</title>
-    <link rel="stylesheet" href="/lab/static/css/style.css?v=20">
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=22">
     <!-- p5.js for preview -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
@@ -27,10 +27,10 @@
     
     <main class="workspace-container">
         <!-- Tab Navigation -->
-        <div class="tab-nav">
+        <div class="tab-nav" id="tab-nav">
             <button class="tab-btn active" data-tab="chat">💬 Chat</button>
             <button class="tab-btn" data-tab="code">📄 Code</button>
-            <button class="tab-btn" data-tab="preview">▶️ Preview</button>
+            <button class="tab-btn" data-tab="preview" id="preview-tab-btn">▶️ Preview</button>
         </div>
         
         <!-- Tab Content -->
@@ -42,14 +42,14 @@
                     <div id="chat-messages" class="chat-messages">
                         <div class="chat-welcome">
                             <p>👋 Welcome to your coding project!</p>
-                            <p>Describe what you want to build and I'll create it for you.</p>
-                            <p class="example">Try: "Make a game where a ball bounces around the screen"</p>
+                            <p>I'm Hari — your coding partner. Describe what you want to build and we'll create it together.</p>
+                            <p class="example">Try: "Make a game where a ball bounces around the screen" or "I want to build a todo list app"</p>
                         </div>
                     </div>
                     
                     <div class="chat-input-area">
                         <div id="thinking-indicator" class="thinking hidden">
-                            <span class="spinner">⏳</span> Thinking...
+                            <span class="spinner">⏳</span> Hari is thinking...
                         </div>
                         
                         <div class="input-row">
@@ -59,13 +59,13 @@
                         
                         <div class="chat-toolbar">
                             <label class="upload-btn" title="Upload image or file">
-                                <input type="file" id="chat-upload" accept="image/*,.txt,.js,.html,.css" hidden>
+                                <input type="file" id="chat-upload" accept="image/*,.txt,.js,.html,.css,.py" hidden>
                                 📎 Upload
                             </label>
                             <span id="upload-preview" class="upload-preview hidden"></span>
                         </div>
                         
-                        <div class="quick-actions">
+                        <div class="quick-actions" id="quick-actions">
                             <button class="quick-btn" data-prompt="Make it faster">⚡ Faster</button>
                             <button class="quick-btn" data-prompt="Add a score">🏆 Add Score</button>
                             <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
@@ -79,7 +79,7 @@
             <!-- Code Tab -->
             <div id="code-tab" class="tab-pane">
                 <div class="code-toolbar">
-                    <span class="code-label" id="code-type-label">JavaScript (read-only)</span>
+                    <span class="code-label" id="code-type-label">Code (read-only)</span>
                     <label class="toggle">
                         <input type="checkbox" id="edit-mode">
                         Enable Editing
@@ -105,7 +105,7 @@
     </main>
     
     <script src="/lab/static/js/auth.js?v=2"></script>
-    <script src="/lab/static/js/sandbox.js?v=20"></script>
-    <script src="/lab/static/js/workspace.js?v=20"></script>
+    <script src="/lab/static/js/sandbox.js?v=21"></script>
+    <script src="/lab/static/js/workspace.js?v=22"></script>
 </body>
 </html>

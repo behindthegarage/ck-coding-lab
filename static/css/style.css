@@ -1175,10 +1175,14 @@ body {
 }
 
 .badge-html {
-    background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
-    color: white;
+background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
+color: white;
 }
 
+.badge-python {
+    background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+    color: white;
+}
 /* Admin link in header */
 #admin-link {
     background: var(--primary);
@@ -1192,4 +1196,39 @@ body {
 }
 #admin-link:hover {
     opacity: 0.9;
+}
+
+/* Better formatting for AI explanations */
+.message-bubble .explanation {
+    line-height: 1.6;
+}
+
+.message-bubble .explanation p {
+    margin-bottom: 0.75rem;
+}
+
+.message-bubble .explanation p:last-child {
+    margin-bottom: 0;
+}
+
+.message-bubble .explanation br {
+    display: block;
+    content: ;
+    margin-bottom: 0.25rem;
+}
+
+.message-bubble .suggestions {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.message-bubble .suggestions ul {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.25rem;
+}
+
+.message-bubble .suggestions li {
+    margin-bottom: 0.25rem;
+    line-height: 1.5;
 }

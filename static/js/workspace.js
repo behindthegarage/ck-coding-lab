@@ -36,16 +36,19 @@ async function loadProject() {
     // Load conversation history
     loadConversations();
 
-    // Run initial preview if there's code
-    if (currentCode) {
+    // Run initial preview if there's code (and not Python)
+    if (currentCode && project.language !== 'python') {
         runPreview();
     }
 }
 
-// Update UI based on project type (p5js or html)
+// Update UI based on project type (p5js, html, or python)
 function updateProjectTypeUI(language) {
     const badge = document.getElementById('project-type-badge');
     const codeLabel = document.getElementById('code-type-label');
+    const previewTabBtn = document.getElementById('preview-tab-btn');
+    const quickActions = document.getElementById('quick-actions');
+    const welcome = document.querySelector('.chat-welcome');
     
     if (language === 'html') {
         if (badge) {
@@ -55,7 +58,43 @@ function updateProjectTypeUI(language) {
         if (codeLabel) {
             codeLabel.textContent = 'HTML/CSS/JS (read-only)';
         }
+        if (previewTabBtn) {
+            previewTabBtn.style.display = 'inline-block';
+        }
+    } else if (language === 'python') {
+        if (badge) {
+            badge.textContent = '🐍 Python';
+            badge.className = 'project-badge badge-python';
+        }
+        if (codeLabel) {
+            codeLabel.textContent = 'Python (read-only)';
+        }
+        // Hide preview tab for Python projects
+        if (previewTabBtn) {
+            previewTabBtn.style.display = 'none';
+        }
+        // Update welcome message for Python
+        if (welcome) {
+            welcome.innerHTML = `<p>👋 Welcome to your Python project!</p>
+                <p>I'm Hari — your coding partner. Describe what you want to build and we'll create it together.</p>
+                <p class="example">Try: "Make a script that generates random passwords" or "I want to build a text-based adventure game"</p>`;
+        }
+        // Update quick actions for Python
+        if (quickActions) {
+            quickActions.innerHTML = `<button class="quick-btn" data-prompt="Add error handling">🛡️ Add Error Handling</button>
+                <button class="quick-btn" data-prompt="Add comments explaining the code">💬 Add Comments</button>
+                <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
+                <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>`;
+            // Re-attach event listeners
+            quickActions.querySelectorAll('.quick-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const prompt = btn.dataset.prompt;
+                    sendMessage(prompt);
+                });
+            });
+        }
     } else {
+        // Default to p5js
         if (badge) {
             badge.textContent = '🎨 p5.js';
             badge.className = 'project-badge badge-p5js';
@@ -63,7 +102,27 @@ function updateProjectTypeUI(language) {
         if (codeLabel) {
             codeLabel.textContent = 'JavaScript (read-only)';
         }
+        if (previewTabBtn) {
+            previewTabBtn.style.display = 'inline-block';
+        }
     }
+}
+
+// Format text with proper line breaks and basic markdown
+function formatText(text) {
+    if (!text) return '';
+    
+    // Escape HTML first
+    let formatted = escapeHtml(text);
+    
+    // Convert line breaks to <br> and <p> tags
+    const paragraphs = formatted.split(/\n\n+/);
+    return paragraphs.map(p => {
+        // Handle single line breaks within paragraphs
+        const lines = p.split(/\n/);
+        const withBreaks = lines.join('<br>');
+        return `<p>${withBreaks}</p>`;
+    }).join('');
 }
 
 // Load conversation messages
@@ -91,16 +150,15 @@ function loadConversations() {
             const parsed = parseAssistantMessage(msg.content);
             messageDiv.innerHTML = `
                 <div class="message-bubble">
-                    <p>${escapeHtml(parsed.explanation)}</p>
-                    ${parsed.code ? `<pre><code class="language-javascript">${escapeHtml(parsed.code.substring(0, 200))}${parsed.code.length > 200 ? '...' : ''}</code></pre>` : ''}
+                    <div class="explanation">${formatText(parsed.explanation)}</div>
                     ${parsed.suggestions.length > 0 ? `
                         <div class="suggestions">
-                            <p><strong>Ideas:</strong></p>
+                            <p><strong>Ideas to try:</strong></p>
                             <ul>${parsed.suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
                         </div>
                     ` : ''}
                 </div>
-                <div class="message-meta">AI · ${msg.model || 'unknown'} · ${formatTime(msg.created_at)}</div>
+                <div class="message-meta">Hari · ${msg.model || 'kimi'} · ${formatTime(msg.created_at)}</div>
             `;
         }
 
@@ -160,8 +218,11 @@ async function sendMessage(message) {
             currentCode = data.response.code;
             updateCodeDisplay();
 
-            switchToTab('preview');
-            runPreview();
+            // Only auto-switch to preview for runnable languages
+            if (project.language !== 'python') {
+                switchToTab('preview');
+                runPreview();
+            }
         }
 
         const assistantMsg = document.createElement('div');
@@ -169,16 +230,15 @@ async function sendMessage(message) {
         const suggestions = data.response.suggestions || [];
         assistantMsg.innerHTML = `
             <div class="message-bubble">
-                <p>${escapeHtml(data.response.explanation || '')}</p>
-                ${data.response.code ? `<pre><code class="language-javascript">${escapeHtml(data.response.code.substring(0, 200))}${data.response.code.length > 200 ? '...' : ''}</code></pre>` : ''}
+                <div class="explanation">${formatText(data.response.explanation)}</div>
                 ${suggestions.length > 0 ? `
                     <div class="suggestions">
-                        <p><strong>Ideas:</strong></p>
+                        <p><strong>Ideas to try:</strong></p>
                         <ul>${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
                     </div>
                 ` : ''}
             </div>
-            <div class="message-meta">AI · ${data.response.model || 'kimi'} · ${formatTime(new Date().toISOString())}</div>
+            <div class="message-meta">Hari · ${data.response.model || 'kimi'} · ${formatTime(new Date().toISOString())}</div>
         `;
         container.appendChild(assistantMsg);
         container.scrollTop = container.scrollHeight;
@@ -220,7 +280,7 @@ function handleFileUpload(file) {
             preview.classList.remove('hidden');
         };
         reader.readAsDataURL(file);
-    } else if (file.type === 'text/plain' || file.name.match(/\.(js|html|css|txt|json)$/)) {
+    } else if (file.type === 'text/plain' || file.name.match(/\.(js|html|css|txt|json|py)$/)) {
         const reader = new FileReader();
         reader.onload = (e) => {
             pendingUpload = {
@@ -262,6 +322,12 @@ function runPreview() {
     
     const language = (project && project.language) ? project.language : 'p5js';
     
+    // Don't try to preview Python in browser
+    if (language === 'python') {
+        container.innerHTML = '<p class="preview-placeholder">Python code runs on your computer. Copy the code and run it locally with Python installed.</p>';
+        return;
+    }
+    
     sandboxRunner = new SandboxRunner('preview-container');
     sandboxRunner.run(currentCode, language);
 }
@@ -274,7 +340,7 @@ function parseAssistantMessage(content) {
         suggestions: []
     };
 
-    const codeMatch = content.match(/```(?:javascript|js|html)?\s*\n([\s\S]*?)\n```/);
+    const codeMatch = content.match(/```(?:javascript|js|html|python|py)?\s*\n([\s\S]*?)\n```/);
     if (codeMatch) {
         result.code = codeMatch[1].trim();
     }

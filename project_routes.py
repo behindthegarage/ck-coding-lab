@@ -77,7 +77,7 @@ def create_project():
     
     name = data['name'].strip()
     description = data.get('description', '').strip()
-    language = data.get('language', 'p5js')  # Default to p5js
+    language = data.get('language', 'undecided')  # Default to p5js
     user_id = g.current_user['id']
     
     if len(name) < 1 or len(name) > 100:
@@ -230,7 +230,7 @@ def chat_with_ai(project_id):
             return jsonify({"success": False, "error": "Project not found"}), 404
         
         current_code = result['current_code'] or ''
-        language = result['language'] or 'p5js'  # Default to p5js
+        language = result['language'] or 'undecided'  # Default to p5js
         
         # Get conversation history for context
         db.execute('''
@@ -405,7 +405,7 @@ def validate_code(project_id):
         return jsonify({"success": False, "error": "Code is required"}), 400
     
     code = data['code']
-    language = data.get('language', 'p5js')
+    language = data.get('language', 'undecided')
     
     # Verify ownership
     with get_db() as db:

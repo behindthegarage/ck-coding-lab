@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Projects - Club Kinawa Coding Lab</title>
-    <link rel="stylesheet" href="/lab/static/css/style.css?v=5">
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=7">
 </head>
 <body class="projects-page">
     <header class="app-header">
@@ -38,33 +38,18 @@
                 <input type="text" id="project-name" placeholder="My Awesome Game" maxlength="100">
             </div>
             <div class="form-group">
-                <label for="project-desc">Description (optional)</label>
-                <textarea id="project-desc" placeholder="What do you want to build?" maxlength="500"></textarea>
-            </div>
-            <div class="form-group">
-                <label>Project Type</label>
-                <div class="language-picker">
-                    <button type="button" class="lang-pick active" data-lang="p5js">
-                        <span class="lang-icon">🎨</span>
-                        <span class="lang-name">p5.js</span>
-                        <span class="lang-desc">Games & animations</span>
-                    </button>
-                    <button type="button" class="lang-pick" data-lang="html">
-                        <span class="lang-icon">🌐</span>
-                        <span class="lang-name">HTML</span>
-                        <span class="lang-desc">Websites & web games</span>
-                    </button>
-                </div>
+                <label for="project-desc">What do you want to build?</label>
+                <textarea id="project-desc" placeholder="Describe your idea... a game, a website, a tool? We'll figure out the best way to build it together." maxlength="1000" rows="4"></textarea>
             </div>
             <div class="modal-actions">
                 <button id="cancel-project" class="btn-secondary">Cancel</button>
-                <button id="create-project" class="btn-primary">Create</button>
+                <button id="create-project" class="btn-primary">Start Building</button>
             </div>
             <div id="project-error" class="error"></div>
         </div>
     </div>
     
     <script src="/lab/static/js/auth.js?v=2"></script>
-    <script src="/lab/static/js/projects.js?v=4"></script>
+    <script src="/lab/static/js/projects.js?v=6"></script>
 </body>
 </html>
