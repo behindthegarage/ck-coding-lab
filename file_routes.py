@@ -454,3 +454,33 @@ _None yet_
         "created": created_files,
         "message": f"Created {len(created_files)} default files"
     })
+
+
+# ============ PREVIEW BUNDLE ROUTES ============
+
+
+
+# ============ PREVIEW BUNDLE ROUTES ============
+
+@file_bp.route('/projects/<int:project_id>/preview-bundle', methods=['GET'])
+@require_auth
+def get_preview_bundle(project_id):
+    """Get all files bundled for preview (for multi-file projects)."""
+    user_id = g.current_user['id']
+    
+    if not verify_project_access(project_id, user_id):
+        return jsonify({"success": False, "error": "Project not found"}), 404
+    
+    with get_db() as db:
+        db.execute('''
+            SELECT filename, content
+            FROM project_files
+            WHERE project_id = ?
+            ORDER BY filename
+        ''', (project_id,))
+        
+        files = {}
+        for row in db.fetchall():
+            files[row['filename']] = row['content']
+    
+    return jsonify({"success": True, "files": files})

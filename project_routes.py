@@ -440,7 +440,8 @@ def chat_with_ai(project_id):
             "suggestions": result['suggestions'],
             "model": result['model'],
             "tokens_used": result['tokens_used'],
-            "tool_calls": result.get('tool_calls', [])
+            "tool_calls": result.get('tool_calls', []),
+            "created_files": result.get('created_files', [])
         }
     })
 

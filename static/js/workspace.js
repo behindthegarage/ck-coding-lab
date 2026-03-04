@@ -43,7 +43,7 @@ async function loadProject() {
     loadConversations();
 
     // Run initial preview if there's code (and not Python)
-    if (currentCode && project.language !== 'python') {
+    if (project.language !== 'python') {
         runPreview();
     }
 }
@@ -355,43 +355,68 @@ async function sendMessage(message) {
         });
 
         if (data && data.success) {
-        if (data.response.code) {
-            currentCode = data.response.code;
-            updateCodeDisplay();
-
-            // Only auto-switch to preview for runnable languages
-            if (project.language !== 'python') {
-                switchToTab('preview');
-                runPreview();
+            // Refresh file tree if tools were used OR files were created
+            const hasNewFiles = data.response.created_files && data.response.created_files.length > 0;
+            const hasToolCalls = data.response.tool_calls && data.response.tool_calls.length > 0;
+            
+            if (hasNewFiles || hasToolCalls) {
+                await refreshFileTree();
             }
-        }
-        
-        // Refresh file tree if tools were used
-        if (data.response.tool_calls && data.response.tool_calls.length > 0) {
-            refreshFileTree();
-        }
+            
+            if (data.response.code) {
+                currentCode = data.response.code;
+                updateCodeDisplay();
 
-        const assistantMsg = document.createElement('div');
-        assistantMsg.className = 'message assistant';
-        const suggestions = data.response.suggestions || [];
-        const toolCallsHtml = renderToolCalls(data.response.tool_calls);
-        
-        assistantMsg.innerHTML = `
-            <div class="message-bubble">
-                <div class="explanation">${formatText(data.response.explanation)}</div>
-                ${toolCallsHtml}
-                ${suggestions.length > 0 ? `
-                    <div class="suggestions">
-                        <p><strong>Ideas to try:</strong></p>
-                        <ul>${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+                // Only auto-switch to preview for runnable languages
+                if (project.language !== 'python') {
+                    switchToTab('preview');
+                    runPreview();
+                }
+            } else if (hasNewFiles) {
+                // If no main code but files were created, still run preview for multi-file projects
+                if (project.language !== 'python') {
+                    switchToTab('preview');
+                    runPreview();
+                }
+            }
+
+            const assistantMsg = document.createElement('div');
+            assistantMsg.className = 'message assistant';
+            const suggestions = data.response.suggestions || [];
+            const toolCallsHtml = renderToolCalls(data.response.tool_calls);
+            
+            // Show created files in the message
+            let createdFilesHtml = '';
+            if (hasNewFiles) {
+                createdFilesHtml = `
+                    <div class="created-files-list" style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.1); border-radius: 6px;">
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Created files:</p>
+                        ${data.response.created_files.map(f => `
+                            <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                                <span style="color: #22c55e;">✓</span> ${escapeHtml(f.filename)}
+                            </div>
+                        `).join('')}
                     </div>
-                ` : ''}
-            </div>
-            <div class="message-meta">Hari · ${data.response.model || 'kimi'} · ${formatTime(new Date().toISOString())}</div>
-        `;
-        container.appendChild(assistantMsg);
-        container.scrollTop = container.scrollHeight;
-    } else {
+                `;
+            }
+            
+            assistantMsg.innerHTML = `
+                <div class="message-bubble">
+                    <div class="explanation">${formatText(data.response.explanation)}</div>
+                    ${toolCallsHtml}
+                    ${createdFilesHtml}
+                    ${suggestions.length > 0 ? `
+                        <div class="suggestions">
+                            <p><strong>Ideas to try:</strong></p>
+                            <ul>${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="message-meta">Hari · ${data.response.model || 'kimi'} · ${formatTime(new Date().toISOString())}</div>
+            `;
+            container.appendChild(assistantMsg);
+            container.scrollTop = container.scrollHeight;
+        } else {
             const errorMsg = document.createElement('div');
             errorMsg.className = 'message assistant';
             errorMsg.innerHTML = `
@@ -480,17 +505,12 @@ function updateCodeDisplay() {
     editor.value = currentCode;
 }
 
-// Run code in preview
-function runPreview() {
+// Run code in preview - Updated for multi-file project support
+async function runPreview() {
     const container = document.getElementById('preview-container');
     
     if (!container) {
         console.error("runPreview: preview-container element not found!");
-        return;
-    }
-    
-    if (!currentCode) {
-        container.innerHTML = '<p class="preview-placeholder">Your project preview will appear here.</p>';
         return;
     }
     
@@ -503,7 +523,88 @@ function runPreview() {
     }
     
     sandboxRunner = new SandboxRunner('preview-container');
+    
+    // Check if this is a multi-file project with index.html
+    const hasIndexHtml = projectFiles.some(f => f.filename === 'index.html');
+    
+    if (hasIndexHtml) {
+        // Multi-file project: fetch all files and build preview bundle
+        console.log("Multi-file project detected - fetching preview bundle");
+        try {
+            const response = await apiRequest(`/projects/${projectId}/preview-bundle`);
+            if (response && response.success && response.files) {
+                const bundledHtml = buildPreviewBundle(response.files);
+                sandboxRunner.runHTML(bundledHtml);
+                return;
+            }
+        } catch (e) {
+            console.error("Error loading preview bundle:", e);
+        }
+    }
+    
+    // Single-file fallback: use currentCode
+    if (!currentCode || !currentCode.trim()) {
+        container.innerHTML = '<p class="preview-placeholder">Your project preview will appear here.</p>';
+        return;
+    }
+    
     sandboxRunner.run(currentCode, language);
+}
+
+// Build preview bundle from project files
+function buildPreviewBundle(files) {
+    // Get the index.html content
+    let indexHtml = files['index.html'] || '';
+    
+    // Inject CSS files into the head
+    const cssFiles = Object.keys(files).filter(f => f.endsWith('.css'));
+    let cssInjection = '';
+    cssFiles.forEach(filename => {
+        const cssContent = files[filename] || '';
+        cssInjection += `\n<style data-file="${filename}">\n${cssContent}\n</style>\n`;
+    });
+    
+    // Inject CSS before </head> or after <head>
+    if (indexHtml.includes('</head>')) {
+        indexHtml = indexHtml.replace('</head>', `${cssInjection}</head>`);
+    } else if (indexHtml.includes('<head>')) {
+        indexHtml = indexHtml.replace('<head>', `<head>${cssInjection}`);
+    } else if (indexHtml.includes('<html>')) {
+        // No head tag, add one after <html>
+        indexHtml = indexHtml.replace('<html>', `<html><head>${cssInjection}</head>`);
+    } else {
+        // No html or head tags, prepend
+        indexHtml = `<head>${cssInjection}</head>\n${indexHtml}`;
+    }
+    
+    // Inject JS files (except those already in script tags in index.html)
+    const jsFiles = Object.keys(files).filter(f => f.endsWith('.js') && f !== 'main.js');
+    let jsInjection = '';
+    
+    jsFiles.forEach(filename => {
+        // Skip if already referenced in a script src
+        const scriptRef = `<script[^>]*src=["']${filename}["']`;
+        if (!new RegExp(scriptRef, 'i').test(indexHtml)) {
+            const jsContent = files[filename] || '';
+            jsInjection += `\n<script data-file="${filename}">\n${jsContent}\n</script>\n`;
+        }
+    });
+    
+    // Also inject main.js if it exists and isn't already in index.html
+    if (files['main.js'] && !/<script[^>]*src=["']main\.js["']/.test(indexHtml)) {
+        jsInjection += `\n<script data-file="main.js">\n${files['main.js']}\n</script>\n`;
+    }
+    
+    // Inject JS before </body> or before </html> or at the end
+    if (indexHtml.includes('</body>')) {
+        indexHtml = indexHtml.replace('</body>', `${jsInjection}</body>`);
+    } else if (indexHtml.includes('</html>')) {
+        indexHtml = indexHtml.replace('</html>', `${jsInjection}</html>`);
+    } else {
+        indexHtml += jsInjection;
+    }
+    
+    return indexHtml;
 }
 
 // Parse assistant message for display
