@@ -4,7 +4,7 @@ Club Kinawa Coding Lab
 
 Provides endpoints for:
 - Project CRUD operations
-- Chat/AI code generation
+- Chat/AI code generation with tool use
 - Code version management
 """
 
@@ -69,7 +69,7 @@ def list_projects():
 @project_bp.route('/projects', methods=['POST'])
 @require_auth
 def create_project():
-    """Create a new project."""
+    """Create a new project with default files."""
     data = request.get_json()
     
     if not data or 'name' not in data:
@@ -77,7 +77,7 @@ def create_project():
     
     name = data['name'].strip()
     description = data.get('description', '').strip()
-    language = data.get('language', 'undecided')  # Default to p5js
+    language = data.get('language', 'undecided')
     user_id = g.current_user['id']
     
     if len(name) < 1 or len(name) > 100:
@@ -91,6 +91,9 @@ def create_project():
         
         project_id = db.lastrowid
         
+        # Create default files for the project
+        _create_default_files(db, project_id, name)
+        
         # Fetch the created project
         db.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
         project = row_to_dict(db.fetchone())
@@ -98,10 +101,120 @@ def create_project():
     return jsonify({"success": True, "project": project}), 201
 
 
+def _create_default_files(db, project_id: int, project_name: str):
+    """Create default files for a new project."""
+    from datetime import datetime
+    
+    default_files = {
+        'design.md': f"""# Design: {project_name}
+
+## Elevator Pitch
+
+[One sentence describing what this project does]
+
+## Core Features
+
+- Feature 1
+- Feature 2
+- Feature 3
+
+## Stretch Goals
+
+- [ ] Stretch feature 1
+- [ ] Stretch feature 2
+
+## Open Questions
+
+- What technology stack should we use?
+- What's the simplest version we can build first?
+""",
+        'architecture.md': f"""# Architecture: {project_name}
+
+## Technology Stack
+
+- Language: [p5.js / HTML/CSS/JS / Python]
+- Key Libraries: 
+- Target Platform: [Browser / Desktop / Mobile]
+
+## File Structure
+
+```
+{project_name}/
+├── main.js (or main.py, index.html)
+└── [other files]
+```
+
+## Key Components
+
+1. **Component 1** - Description
+2. **Component 2** - Description
+
+## Dependencies
+
+- None yet
+
+## Notes
+
+[Any technical decisions or constraints]
+""",
+        'todo.md': f"""# Todo: {project_name}
+
+## Current
+
+- [ ] Initial setup
+- [ ] Define core features
+
+## Completed
+
+_None yet_
+
+## Blocked
+
+_None yet_
+
+## Ideas
+
+- Future improvement 1
+- Future improvement 2
+""",
+        'notes.md': f"""# Notes: {project_name}
+
+## Session Log
+
+### {datetime.now().strftime('%Y-%m-%d')}
+
+- Project created
+- Initial ideas:
+
+## Research
+
+[Links, references, things to remember]
+
+## Questions to Ask
+
+- 
+
+## Decisions Made
+
+- 
+"""
+    }
+    
+    for filename, content in default_files.items():
+        try:
+            db.execute('''
+                INSERT INTO project_files (project_id, filename, content)
+                VALUES (?, ?, ?)
+            ''', (project_id, filename, content))
+        except Exception as e:
+            # File might already exist, skip
+            pass
+
+
 @project_bp.route('/projects/<int:project_id>', methods=['GET'])
 @require_auth
 def get_project(project_id):
-    """Get a single project with conversation history."""
+    """Get a single project with conversation history and files."""
     user_id = g.current_user['id']
     
     with get_db() as db:
@@ -124,11 +237,30 @@ def get_project(project_id):
         ''', (project_id,))
         
         conversations = [row_to_dict(row) for row in db.fetchall()]
+        
+        # Get project files
+        db.execute('''
+            SELECT id, filename, created_at, updated_at
+            FROM project_files
+            WHERE project_id = ?
+            ORDER BY 
+                CASE filename
+                    WHEN 'design.md' THEN 1
+                    WHEN 'architecture.md' THEN 2
+                    WHEN 'todo.md' THEN 3
+                    WHEN 'notes.md' THEN 4
+                    ELSE 5
+                END,
+                filename ASC
+        ''', (project_id,))
+        
+        files = [row_to_dict(row) for row in db.fetchall()]
     
     return jsonify({
         "success": True,
         "project": project,
-        "conversations": conversations
+        "conversations": conversations,
+        "files": files
     })
 
 
@@ -205,7 +337,7 @@ def delete_project(project_id):
 def chat_with_ai(project_id):
     """
     Send a message to AI and get code response.
-    Stores conversation history.
+    Stores conversation history and tracks tool calls.
     """
     user_id = g.current_user['id']
     data = request.get_json()
@@ -214,7 +346,8 @@ def chat_with_ai(project_id):
         return jsonify({"success": False, "error": "Message is required"}), 400
     
     message = data['message'].strip()
-    model = data.get('model', 'kimi-k2.5')  # Default to Kimi
+    model = data.get('model', 'kimi-k2.5')
+    enable_tools = data.get('enable_tools', True)
     
     if len(message) > 2000:
         return jsonify({"success": False, "error": "Message too long (max 2000 chars)"}), 400
@@ -230,7 +363,7 @@ def chat_with_ai(project_id):
             return jsonify({"success": False, "error": "Project not found"}), 404
         
         current_code = result['current_code'] or ''
-        language = result['language'] or 'undecided'  # Default to p5js
+        language = result['language'] or 'undecided'
         
         # Get conversation history for context
         db.execute('''
@@ -252,14 +385,16 @@ def chat_with_ai(project_id):
             VALUES (?, ?, ?)
         ''', (project_id, 'user', message))
     
-    # Call AI with the project's language
+    # Call AI with the project's language and tool support
     ai = get_ai_client()
     result = ai.generate_code(
         message=message,
         conversation_history=conversation_history,
         current_code=current_code,
-        language=language,  # Pass the project language!
-        model=model
+        language=language,
+        model=model,
+        project_id=project_id,
+        enable_tools=enable_tools
     )
     
     if not result['success']:
@@ -267,6 +402,14 @@ def chat_with_ai(project_id):
             "success": False,
             "error": result.get('error', 'AI generation failed')
         }), 500
+    
+    # Build AI response content including tool call info
+    ai_content = result['full_response']
+    if result.get('tool_calls'):
+        tool_summary = "\n\n---\n\n**Tool Calls:**\n"
+        for tc in result['tool_calls']:
+            tool_summary += f"- `{tc['tool']}`: {tc['input'].get('filename', '')} → {tc['result'].get('action', 'executed')}\n"
+        ai_content += tool_summary
     
     # Save AI response
     with get_db() as db:
@@ -276,7 +419,7 @@ def chat_with_ai(project_id):
         ''', (
             project_id,
             'assistant',
-            result['full_response'],
+            ai_content,
             model,
             result['tokens_used']
         ))
@@ -296,7 +439,8 @@ def chat_with_ai(project_id):
             "code": result['code'],
             "suggestions": result['suggestions'],
             "model": result['model'],
-            "tokens_used": result['tokens_used']
+            "tokens_used": result['tokens_used'],
+            "tool_calls": result.get('tool_calls', [])
         }
     })
 
