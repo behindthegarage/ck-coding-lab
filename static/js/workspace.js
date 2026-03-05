@@ -556,7 +556,7 @@ function buildPreviewBundle(files) {
     // Get the index.html content
     let indexHtml = files['index.html'] || '';
     
-    // Inject CSS files into the head
+    // Inject CSS files into the head (as inline styles)
     const cssFiles = Object.keys(files).filter(f => f.endsWith('.css'));
     let cssInjection = '';
     cssFiles.forEach(filename => {
@@ -570,32 +570,35 @@ function buildPreviewBundle(files) {
     } else if (indexHtml.includes('<head>')) {
         indexHtml = indexHtml.replace('<head>', `<head>${cssInjection}`);
     } else if (indexHtml.includes('<html>')) {
-        // No head tag, add one after <html>
         indexHtml = indexHtml.replace('<html>', `<html><head>${cssInjection}</head>`);
     } else {
-        // No html or head tags, prepend
         indexHtml = `<head>${cssInjection}</head>\n${indexHtml}`;
     }
     
-    // Inject JS files (except those already in script tags in index.html)
-    const jsFiles = Object.keys(files).filter(f => f.endsWith('.js') && f !== 'main.js');
-    let jsInjection = '';
+    // Replace script src references with inline content
+    // First, handle main.js and other JS files referenced via src
+    const jsFiles = Object.keys(files).filter(f => f.endsWith('.js'));
     
     jsFiles.forEach(filename => {
-        // Skip if already referenced in a script src
-        const scriptRef = `<script[^>]*src=["']${filename}["']`;
-        if (!new RegExp(scriptRef, 'i').test(indexHtml)) {
+        const jsContent = files[filename] || '';
+        // Match <script src="filename.js"> or <script src='filename.js'>
+        const scriptRegex = new RegExp(`<script[^>]*src=["']${filename}["'][^>]*>\s*</script>`, 'gi');
+        // Replace with inline script
+        const inlineScript = `<script data-file="${filename}">\n${jsContent}\n</script>`;
+        indexHtml = indexHtml.replace(scriptRegex, inlineScript);
+    });
+    
+    // Inject any remaining JS files that weren't referenced via src
+    let jsInjection = '';
+    jsFiles.forEach(filename => {
+        // Check if already injected (now has data-file attribute)
+        if (!indexHtml.includes(`data-file="${filename}"`)) {
             const jsContent = files[filename] || '';
             jsInjection += `\n<script data-file="${filename}">\n${jsContent}\n</script>\n`;
         }
     });
     
-    // Also inject main.js if it exists and isn't already in index.html
-    if (files['main.js'] && !/<script[^>]*src=["']main\.js["']/.test(indexHtml)) {
-        jsInjection += `\n<script data-file="main.js">\n${files['main.js']}\n</script>\n`;
-    }
-    
-    // Inject JS before </body> or before </html> or at the end
+    // Inject remaining JS before </body> or before </html> or at the end
     if (indexHtml.includes('</body>')) {
         indexHtml = indexHtml.replace('</body>', `${jsInjection}</body>`);
     } else if (indexHtml.includes('</html>')) {

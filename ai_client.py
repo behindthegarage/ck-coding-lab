@@ -446,9 +446,9 @@ class AIClient:
                         })
                 
                 # Make a second call to get the AI's response after tool use
+                # Make a second call to get the AI's response after tool use
                 final_content = self._continue_after_tools(
-                    message, conversation_history, current_code, 
-                    language, project_files, tool_calls, project_id
+                    messages_data, response["tool_calls"], tool_calls, project_id
                 )
             
             # Extract code, explanation, suggestions, and file declarations from response
@@ -530,47 +530,48 @@ class AIClient:
     
     def _continue_after_tools(
         self,
-        message: str,
-        conversation_history: Optional[List[Dict]],
-        current_code: str,
-        language: str,
-        project_files: Dict[str, str],
-        tool_calls: List[Dict],
+        messages_data: tuple,
+        original_tool_calls: List[Dict],
+        tool_results: List[Dict],
         project_id: int
     ) -> str:
         """Make a follow-up call after tool execution to get final response."""
         try:
             import requests
             
-            code_lang_map = {"p5js": "javascript", "html": "html", "python": "python"}
-            code_lang = code_lang_map.get(language, "")
+            messages, system_content, tools = messages_data
             
-            messages = []
-            
-            if current_code and current_code.strip():
-                messages.append({
-                    "role": "user",
-                    "content": f"Here is my current code:\n```{code_lang}\n{current_code}\n```"
+            # Build tool_use content blocks for assistant message
+            assistant_content = []
+            for tool_call in original_tool_calls:
+                assistant_content.append({
+                    "type": "tool_use",
+                    "id": tool_call.get("id", ""),
+                    "name": tool_call.get("name", ""),
+                    "input": tool_call.get("input", {})
                 })
             
-            if conversation_history:
-                for msg in conversation_history[-10:]:
-                    role = msg.get("role", "user")
-                    content = msg.get("content", "")
-                    if role in ["user", "assistant"]:
-                        messages.append({"role": role, "content": content})
+            # Append assistant message that requested the tools
+            messages.append({
+                "role": "assistant", 
+                "content": assistant_content
+            })
             
-            # Build tool results message
-            tool_results_text = "I executed the following tools:\n\n"
-            for tc in tool_calls:
-                tool_results_text += f"Tool: {tc['tool']}\n"
-                tool_results_text += f"Input: {json.dumps(tc['input'])}\n"
-                tool_results_text += f"Result: {json.dumps(tc['result'])}\n\n"
+            # Build tool_result content blocks for user message
+            user_content = []
+            for i_tc, tc in enumerate(tool_results):
+                tool_use_id = original_tool_calls[i_tc].get("id", "") if i_tc < len(original_tool_calls) else ""
+                user_content.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": json.dumps(tc['result'])
+                })
             
-            messages.append({"role": "user", "content": message})
-            messages.append({"role": "assistant", "content": tool_results_text})
-            
-            system_content = self._get_system_prompt(language, project_files)
+            # Append user message with tool results
+            messages.append({
+                "role": "user",
+                "content": user_content
+            })
             
             data = {
                 "model": self.model,
@@ -595,14 +596,21 @@ class AIClient:
             
             if response.status_code == 200:
                 result = response.json()
-                return result.get("content", [{}])[0].get("text", "")
+                content_blocks = result.get("content", [])
+                text_content = ""
+                for block in content_blocks:
+                    if block.get("type") == "text":
+                        text_content += block.get("text", "")
+                return text_content
             else:
+                print(f"API error in continue_after_tools: {response.status_code}")
                 return ""
                 
         except Exception as e:
             print(f"Error in continue_after_tools: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
-    
     def _call_kimi(self, messages_data, enable_tools: bool = False) -> Dict:
         """Call Kimi K2.5 API directly using Anthropic Messages format."""
         try:
