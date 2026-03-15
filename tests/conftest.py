@@ -14,41 +14,61 @@ import os
 import sys
 import tempfile
 import pytest
+import uuid
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import create_app
-from database import init_db_full, get_db
-from auth import create_user, authenticate, create_session, hash_pin
+
+# Global to track current test database
+_current_test_db = None
 
 
-@pytest.fixture(scope='session')
-def app():
+@pytest.fixture(autouse=True)
+def setup_database(monkeypatch, tmp_path):
+    """
+    Autouse fixture to ensure database is properly configured for all tests.
+    This runs before each test and sets up a fresh database.
+    """
+    global _current_test_db
+    
+    # Create temporary database
+    db_path = str(tmp_path / 'test.db')
+    _current_test_db = db_path
+    
+    # Set environment variable
+    monkeypatch.setenv('CKCL_DB_PATH', db_path)
+    
+    # Create database file and initialize
+    from database import init_db_full
+    init_db_full(db_path)
+    
+    yield db_path
+    
+    # Cleanup - file will be deleted by tmp_path fixture
+    _current_test_db = None
+
+
+@pytest.fixture
+def app(setup_database):
     """
     Create and configure a Flask app for testing.
+    Uses the database from setup_database fixture.
     
     Yields:
         Flask: Configured Flask application with test database
     """
-    # Create temporary database
-    db_fd, db_path = tempfile.mkstemp(suffix='.db')
+    from app import create_app
     
     app = create_app({
         'TESTING': True,
-        'DATABASE': db_path,
+        'DATABASE': setup_database,
         'SECRET_KEY': 'test-secret-key'
     })
     
-    # Initialize database with all migrations
-    init_db_full(db_path)
-    
     yield app
-    
-    # Cleanup
-    os.close(db_fd)
-    os.unlink(db_path)
 
 
 @pytest.fixture
@@ -66,32 +86,25 @@ def client(app):
 
 
 @pytest.fixture
-def db_path(app):
+def db_path(setup_database):
     """
-    Get the test database path from the app config.
+    Get the test database path.
     
-    Args:
-        app: Flask app fixture
-        
     Returns:
         str: Path to test database
     """
-    return app.config['DATABASE']
+    return setup_database
 
 
 @pytest.fixture
-def db_connection(db_path):
+def db_connection(setup_database):
     """
     Get a database connection for direct database operations in tests.
     
-    Args:
-        db_path: Database path fixture
-        
     Yields:
         sqlite3.Cursor: Database cursor with foreign keys enabled
     """
-    import sqlite3
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(setup_database)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -105,18 +118,25 @@ def db_connection(db_path):
 # ==================== User Fixtures ====================
 
 @pytest.fixture
-def test_user_factory(db_path):
+def test_user_factory(setup_database):
     """
-    Factory fixture for creating test users.
+    Factory fixture for creating test users with unique usernames.
     
     Returns a function that creates users with default test values.
+    Uses UUID to ensure uniqueness across tests.
     
     Usage:
         def test_something(test_user_factory):
-            user = test_user_factory(username='testkid', pin='1234')
+            user = test_user_factory(pin='1234')
     """
-    def _create_user(username='testuser', pin='1234', role='kid'):
-        return create_user(username, pin, role)
+    from auth import create_user
+    
+    def _create_user(username=None, pin='1234', role='kid'):
+        # Generate unique username if not provided
+        if username is None:
+            username = f'user_{uuid.uuid4().hex[:8]}'
+        user = create_user(username, pin, role)
+        return user
     
     return _create_user
 
@@ -124,12 +144,12 @@ def test_user_factory(db_path):
 @pytest.fixture
 def test_user(test_user_factory):
     """
-    Create a single test user with default values.
+    Create a single test user with unique username.
     
     Returns:
         dict: User data (without pin_hash)
     """
-    return test_user_factory('testuser', '1234', 'kid')
+    return test_user_factory(pin='1234', role='kid')
 
 
 @pytest.fixture
@@ -140,16 +160,18 @@ def test_admin(test_user_factory):
     Returns:
         dict: Admin user data
     """
-    return test_user_factory('testadmin', '5678', 'admin')
+    return test_user_factory(pin='5678', role='admin')
 
 
 @pytest.fixture
-def auth_token_factory(db_path):
+def auth_token_factory(setup_database):
     """
     Factory fixture for creating authentication tokens.
     
     Returns a function that creates session tokens for user IDs.
     """
+    from auth import create_session
+    
     def _create_token(user_id):
         return create_session(user_id)
     
@@ -200,7 +222,7 @@ def admin_auth_headers(auth_headers_factory, test_admin):
 # ==================== Project Fixtures ====================
 
 @pytest.fixture
-def project_factory(db_path, test_user):
+def project_factory(setup_database, test_user):
     """
     Factory fixture for creating test projects.
     
@@ -208,11 +230,14 @@ def project_factory(db_path, test_user):
         def test_project(project_factory):
             project = project_factory(name='My Game', description='Test')
     """
-    def _create_project(name='Test Project', description='A test project', language='p5js'):
-        import sqlite3
-        conn = sqlite3.connect(db_path)
+    def _create_project(name=None, description='A test project', language='p5js'):
+        conn = sqlite3.connect(setup_database)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        
+        # Generate unique name if not provided
+        if name is None:
+            name = f'Project_{uuid.uuid4().hex[:8]}'
         
         cursor.execute('''
             INSERT INTO projects (user_id, name, description, language)
@@ -256,7 +281,8 @@ def create_multiple_users(test_user_factory):
     def _create_many(count=3):
         users = []
         for i in range(count):
-            user = test_user_factory(f'user{i}', f'{1000 + i:04d}')
+            pin = f'{1000 + i:04d}'
+            user = test_user_factory(pin=pin)
             users.append(user)
         return users
     
