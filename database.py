@@ -69,6 +69,23 @@ def init_db(db_path: str = None) -> None:
         CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at)
     ''')
     
+    # Create rate limiting table
+    # Stores chat rate limit buckets per user for multi-process safety
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            window_start TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # Create index on rate limit lookups
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_rate_limit_user_window ON rate_limit_buckets (user_id, window_start)
+    ''')
+    
     conn.commit()
     conn.close()
 

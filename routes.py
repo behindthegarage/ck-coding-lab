@@ -17,11 +17,9 @@ import re
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime
-import auth
 from auth import (
-    create_user, authenticate, create_session, validate_session,
-    invalidate_session, cleanup_expired_sessions, AuthError,
-    InvalidPINError, UserExistsError
+    create_user, authenticate, create_session, validate_session, invalidate_session,
+    cleanup_expired_sessions, require_auth, AuthError, InvalidPINError, UserExistsError
 )
 
 # Create Flask Blueprint
@@ -80,76 +78,6 @@ def record_attempt(ip: str) -> None:
     if ip not in _rate_limit_store:
         _rate_limit_store[ip] = []
     _rate_limit_store[ip].append(now)
-
-
-def get_auth_token() -> str:
-    """
-    Extract Bearer token from Authorization header.
-    
-    Returns:
-        str: Token string or empty string if not present/invalid format
-    """
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header:
-        return ''
-    
-    # Expect "Bearer <token>" format
-    parts = auth_header.split()
-    if len(parts) == 2 and parts[0].lower() == 'bearer':
-        return parts[1]
-    
-    return ''
-
-
-def require_auth(f):
-    """
-    Decorator to require valid session token for protected routes.
-    
-    Adds `g.current_user` with user data if authentication succeeds.
-    Returns 401 if authentication fails.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        token = get_auth_token()
-        
-        if not token:
-            return jsonify({
-                'success': False,
-                'error': 'Authentication required. Provide token in Authorization header.'
-            }), 401
-        
-        user = validate_session(token)
-        if not user:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid or expired session token'
-            }), 401
-        
-        # Store user in Flask's g object for use in route
-        g.current_user = user
-        g.auth_token = token
-        
-        return f(*args, **kwargs)
-    
-    return decorated_function
-
-
-def require_staff(f):
-    """
-    Decorator to require staff/admin privileges.
-    
-    For Phase 2, this is a placeholder. In production, check user role/permissions.
-    Currently requires authentication but doesn't check specific role.
-    """
-    @wraps(f)
-    @require_auth
-    def decorated_function(*args, **kwargs):
-        # TODO: Check if user has staff/admin role when role system is added
-        # For now, any authenticated user can register (for development)
-        # In production, add role checking here
-        return f(*args, **kwargs)
-    
-    return decorated_function
 
 
 # API Routes
@@ -253,7 +181,7 @@ def logout():
         Success (200): {"success": true}
         Error (401): {"success": false, "error": "..."}
     """
-    token = g.auth_token
+    token = g.current_token
     invalidate_session(token)
     
     response = jsonify({

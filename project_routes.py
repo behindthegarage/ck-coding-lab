@@ -14,35 +14,69 @@ from datetime import datetime, timedelta
 import secrets
 
 from database import get_db, row_to_dict
-from auth import validate_session
+from auth import validate_session, require_auth
 from ai_client import get_ai_client
 from sandbox import CodeValidator, SandboxConfig
 
 
+# Rate limiting configuration
+CHAT_RATE_LIMIT_REQUESTS = 10  # Max requests
+CHAT_RATE_LIMIT_WINDOW = 60    # Window in seconds
+
+
+def check_chat_rate_limit(user_id: int) -> tuple[bool, int, int]:
+    """
+    Check if user has exceeded chat rate limit.
+    Uses database-backed storage for multi-process safety.
+    
+    Returns:
+        tuple: (allowed: bool, remaining: int, reset_after: int)
+    """
+    now = datetime.utcnow()
+    window_start = now - timedelta(seconds=CHAT_RATE_LIMIT_WINDOW)
+    
+    with get_db() as db:
+        # Clean old entries for this user
+        db.execute('''
+            DELETE FROM rate_limit_buckets 
+            WHERE user_id = ? AND window_start < datetime(?)
+        ''', (user_id, window_start.strftime('%Y-%m-%dT%H:%M:%S')))
+        
+        # Count current requests in window
+        db.execute('''
+            SELECT COUNT(*) as count FROM rate_limit_buckets 
+            WHERE user_id = ? AND window_start >= datetime(?)
+        ''', (user_id, window_start.strftime('%Y-%m-%dT%H:%M:%S')))
+        
+        result = db.fetchone()
+        current_count = result['count'] if result else 0
+        
+        if current_count >= CHAT_RATE_LIMIT_REQUESTS:
+            # Rate limited - calculate reset time
+            db.execute('''
+                SELECT MIN(window_start) as oldest FROM rate_limit_buckets 
+                WHERE user_id = ?
+            ''', (user_id,))
+            oldest = db.fetchone()
+            if oldest and oldest['oldest']:
+                oldest_dt = datetime.fromisoformat(oldest['oldest'])
+                reset_after = int((oldest_dt + timedelta(seconds=CHAT_RATE_LIMIT_WINDOW) - now).total_seconds())
+            else:
+                reset_after = CHAT_RATE_LIMIT_WINDOW
+            return False, 0, max(0, reset_after)
+        
+        # Record this request
+        db.execute('''
+            INSERT INTO rate_limit_buckets (user_id, window_start)
+            VALUES (?, datetime(?))
+        ''', (user_id, now.strftime('%Y-%m-%dT%H:%M:%S')))
+        
+        remaining = CHAT_RATE_LIMIT_REQUESTS - current_count - 1
+        return True, remaining, 0
+
+
 # Create blueprint
 project_bp = Blueprint('projects', __name__, url_prefix='/api')
-
-
-def require_auth(f):
-    """Decorator to require valid session token."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return jsonify({"success": False, "error": "Missing or invalid authorization header"}), 401
-        
-        token = auth_header[7:]  # Remove "Bearer "
-        user = validate_session(token)
-        
-        if not user:
-            return jsonify({"success": False, "error": "Invalid or expired session"}), 401
-        
-        # Store user in flask g for route access
-        g.current_user = user
-        g.current_token = token
-        
-        return f(*args, **kwargs)
-    return decorated
 
 
 # ============ PROJECT ROUTES ============
@@ -340,6 +374,15 @@ def chat_with_ai(project_id):
     Stores conversation history and tracks tool calls.
     """
     user_id = g.current_user['id']
+    
+    # Check rate limit
+    allowed, remaining, reset_after = check_chat_rate_limit(user_id)
+    if not allowed:
+        return jsonify({
+            "success": False, 
+            "error": f"Rate limit exceeded. Try again in {reset_after} seconds."
+        }), 429
+    
     data = request.get_json()
     
     if not data or 'message' not in data:
