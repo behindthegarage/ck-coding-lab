@@ -7,7 +7,7 @@ Handles database initialization, blueprint registration, and session cleanup.
 """
 
 import os
-from flask import Flask, g, request, send_from_directory
+from flask import Flask, g, request, send_from_directory, redirect
 from database import init_db_full
 from auth import cleanup_expired_sessions
 from routes import auth_bp
@@ -123,18 +123,22 @@ def create_app(test_config: dict = None) -> Flask:
     # API root endpoint
     @app.route('/')
     def index():
-        return {
-            'service': 'Club Kinawa Coding Lab API',
-            'version': '1.0.0',
-            'status': 'running',
-            'endpoints': {
-                'auth': '/api/auth',
-                'projects': '/api/projects',
-                'files': '/api/projects/{id}/files',
-                'admin': '/api/admin',
-                'health': '/api/auth/health'
+        # If browser request, redirect to login
+        # If API request (Accept: application/json), return JSON
+        if request.headers.get('Accept', '').startswith('application/json'):
+            return {
+                'service': 'Club Kinawa Coding Lab API',
+                'version': '1.0.0',
+                'status': 'running',
+                'endpoints': {
+                    'auth': '/api/auth',
+                    'projects': '/api/projects',
+                    'files': '/api/projects/{id}/files',
+                    'admin': '/api/admin',
+                    'health': '/api/auth/health'
+                }
             }
-        }
+        return redirect('/lab/login')
     
     # Frontend routes - serve the lab interface
     @app.route('/lab')
