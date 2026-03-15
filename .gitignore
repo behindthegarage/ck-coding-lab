@@ -28,5 +28,8 @@ uploads/*
 .DS_Store
 Thumbs.db
 
-# Gunicorn
-gunicorn.ctl
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+.bandit-report.json

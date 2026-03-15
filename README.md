@@ -1,5 +1,10 @@
 # Club Kinawa Coding Lab
 
+[![Tests](https://github.com/behindthegarage/ck-coding-lab/actions/workflows/tests.yml/badge.svg)](https://github.com/behindthegarage/ck-coding-lab/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/behindthegarage/ck-coding-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/behindthegarage/ck-coding-lab)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 A vibe coding workspace where kids build games and interactive projects through natural language conversation.
 
 ## Quick Start
@@ -161,6 +166,44 @@ try:
 except Exception as e:
     print(f'Error: {e}')
 "
+```
+
+## CI/CD
+
+This project uses GitHub Actions for automated testing and code quality checks.
+
+### Running Tests Locally
+
+```bash
+# Run all tests
+./scripts/test.sh
+
+# Run tests with coverage report
+./scripts/test-coverage.sh
+
+# Run linters (Black + Ruff)
+./scripts/lint.sh
+
+# Fix linting issues automatically
+./scripts/lint.sh --fix
+```
+
+### Pre-commit Hooks
+
+Install pre-commit hooks to run checks before each commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+### Environment Setup
+
+Copy the example environment file and configure:
+
+```bash
+cp .env.example .env
+# Edit .env with your values
 ```
 
 ## Development
