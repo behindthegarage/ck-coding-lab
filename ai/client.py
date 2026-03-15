@@ -312,7 +312,7 @@ class AIClient:
             print(f"Calling Kimi API at {self.base_url}/v1/messages")
             print(f"Messages count: {len(messages)}")
             if enable_tools:
-                print(f"Tools enabled: {len(tools)} tools")
+                print(f"Tools enabled: {len(tools) if tools else 0} tools")
             
             response = requests.post(
                 f"{self.base_url}/v1/messages",

@@ -19,12 +19,10 @@ from unittest.mock import patch, MagicMock
 class TestChatAPI:
     """Tests for chat/AI endpoints."""
     
-    @patch('ai_client.get_ai_client')
-    def test_chat_success(self, mock_get_client, client, auth_headers, project_factory):
+    def test_chat_success(self, client, auth_headers, project_factory, mock_ai_client):
         """Test successful chat interaction."""
-        # Setup mock
-        mock_ai = MagicMock()
-        mock_ai.generate_code.return_value = {
+        # Setup mock response
+        mock_ai_client.generate_code.return_value = {
             'success': True,
             'code': 'function setup() { createCanvas(400, 400); }',
             'explanation': 'Creates a canvas',
@@ -35,7 +33,6 @@ class TestChatAPI:
             'tool_calls': [],
             'created_files': []
         }
-        mock_get_client.return_value = mock_ai
         
         project = project_factory()
         
@@ -48,15 +45,14 @@ class TestChatAPI:
         assert 'response' in data
         assert data['response']['code'] is not None
         assert data['response']['explanation'] is not None
+        mock_ai_client.generate_code.assert_called_once()
     
-    @patch('ai_client.get_ai_client')
-    def test_chat_stores_conversation(self, mock_get_client, client, auth_headers, 
-                                       project_factory, db_path):
+    def test_chat_stores_conversation(self, client, auth_headers, 
+                                       project_factory, db_path, mock_ai_client):
         """Test that chat messages are stored in database."""
         import sqlite3
         
-        mock_ai = MagicMock()
-        mock_ai.generate_code.return_value = {
+        mock_ai_client.generate_code.return_value = {
             'success': True,
             'code': 'test code',
             'explanation': 'test explanation',
@@ -67,7 +63,6 @@ class TestChatAPI:
             'tool_calls': [],
             'created_files': []
         }
-        mock_get_client.return_value = mock_ai
         
         project = project_factory()
         project_id = project['id']
@@ -78,6 +73,7 @@ class TestChatAPI:
         
         # Verify stored in database
         conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('''
             SELECT role, content FROM conversations WHERE project_id = ?
@@ -90,14 +86,12 @@ class TestChatAPI:
         assert messages[0]['role'] == 'user'
         assert messages[0]['content'] == 'Hello AI'
     
-    @patch('ai_client.get_ai_client')
-    def test_chat_updates_project_code(self, mock_get_client, client, auth_headers, 
-                                        project_factory, db_path):
+    def test_chat_updates_project_code(self, client, auth_headers, 
+                                        project_factory, db_path, mock_ai_client):
         """Test that generated code updates the project."""
         import sqlite3
         
-        mock_ai = MagicMock()
-        mock_ai.generate_code.return_value = {
+        mock_ai_client.generate_code.return_value = {
             'success': True,
             'code': 'function draw() { ellipse(100, 100, 50, 50); }',
             'explanation': 'Draws a circle',
@@ -108,7 +102,6 @@ class TestChatAPI:
             'tool_calls': [],
             'created_files': []
         }
-        mock_get_client.return_value = mock_ai
         
         project = project_factory()
         project_id = project['id']
@@ -118,6 +111,7 @@ class TestChatAPI:
         
         # Verify code was updated
         conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
         result = cursor.fetchone()
@@ -125,15 +119,12 @@ class TestChatAPI:
         
         assert 'ellipse' in result['current_code']
     
-    @patch('ai_client.get_ai_client')
-    def test_chat_ai_error(self, mock_get_client, client, auth_headers, project_factory):
+    def test_chat_ai_error(self, client, auth_headers, project_factory, mock_ai_client):
         """Test handling of AI generation error."""
-        mock_ai = MagicMock()
-        mock_ai.generate_code.return_value = {
+        mock_ai_client.generate_code.return_value = {
             'success': False,
             'error': 'Rate limit exceeded'
         }
-        mock_get_client.return_value = mock_ai
         
         project = project_factory()
         
@@ -232,12 +223,10 @@ class TestCodeValidationAPI:
 class TestChatConversationFlow:
     """Tests for multi-message conversation flows."""
     
-    @patch('ai_client.get_ai_client')
-    def test_conversation_history_included(self, mock_get_client, client, auth_headers, 
-                                            project_factory):
+    def test_conversation_history_included(self, client, auth_headers, 
+                                            project_factory, mock_ai_client):
         """Test that conversation history is passed to AI."""
-        mock_ai = MagicMock()
-        mock_ai.generate_code.return_value = {
+        mock_ai_client.generate_code.return_value = {
             'success': True,
             'code': 'code',
             'explanation': 'explanation',
@@ -248,7 +237,6 @@ class TestChatConversationFlow:
             'tool_calls': [],
             'created_files': []
         }
-        mock_get_client.return_value = mock_ai
         
         project = project_factory()
         
@@ -258,7 +246,7 @@ class TestChatConversationFlow:
                        json={'message': f'Message {i}'})
         
         # Verify AI was called with conversation history
-        calls = mock_ai.generate_code.call_args_list
+        calls = mock_ai_client.generate_code.call_args_list
         assert len(calls) == 3
         
         # Later calls should include history
@@ -266,11 +254,9 @@ class TestChatConversationFlow:
         assert 'conversation_history' in last_call
         assert len(last_call['conversation_history']) > 0
     
-    @patch('ai_client.get_ai_client')
-    def test_chat_with_tool_calls(self, mock_get_client, client, auth_headers, project_factory):
+    def test_chat_with_tool_calls(self, client, auth_headers, project_factory, mock_ai_client):
         """Test chat that includes tool calls."""
-        mock_ai = MagicMock()
-        mock_ai.generate_code.return_value = {
+        mock_ai_client.generate_code.return_value = {
             'success': True,
             'code': '',
             'explanation': 'Updated the file',
@@ -287,7 +273,6 @@ class TestChatConversationFlow:
             ],
             'created_files': []
         }
-        mock_get_client.return_value = mock_ai
         
         project = project_factory()
         

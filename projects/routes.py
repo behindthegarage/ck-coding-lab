@@ -209,7 +209,7 @@ def validate_code(project_id):
     
     # Validate code
     validator = CodeValidator()
-    is_valid, issues = validator.validate(code, language)
+    is_valid, issues = validator.validate(code)
     
     return jsonify({
         "success": True,

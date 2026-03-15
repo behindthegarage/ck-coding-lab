@@ -314,6 +314,7 @@ class TestProjectVersionsAPI:
     def test_save_version_no_code(self, client, auth_headers, project_factory):
         """Test saving version when project has no code."""
         project = project_factory()
+        project_id = project['id']
         
         response = client.post(f'/api/projects/{project_id}/versions', headers=auth_headers,
                               json={'description': 'Empty'})

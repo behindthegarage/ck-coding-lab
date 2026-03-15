@@ -12,7 +12,12 @@ from datetime import datetime
 import os
 
 # Default database path - can be overridden via environment variable
-DATABASE_PATH = os.environ.get('CKCL_DB_PATH', 'ckcl.db')
+def get_database_path():
+    """Get database path from environment at call time (for test isolation)."""
+    return os.environ.get('CKCL_DB_PATH', 'ckcl.db')
+
+# Keep for backwards compatibility
+DATABASE_PATH = get_database_path()
 
 
 def init_db(db_path: str = None) -> None:
@@ -24,10 +29,10 @@ def init_db(db_path: str = None) -> None:
     - sessions: Stores active authentication sessions
     
     Args:
-        db_path: Optional path to database file. Uses DATABASE_PATH if not provided.
+        db_path: Optional path to database file. Uses get_database_path() if not provided.
     """
     if db_path is None:
-        db_path = DATABASE_PATH
+        db_path = get_database_path()
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -101,13 +106,13 @@ def get_db(db_path: str = None):
             result = db.fetchone()
     
     Args:
-        db_path: Optional path to database file. Uses DATABASE_PATH if not provided.
+        db_path: Optional path to database file. Uses get_database_path() if not provided.
     
     Yields:
         sqlite3.Cursor: Database cursor for executing queries.
     """
     if db_path is None:
-        db_path = DATABASE_PATH
+        db_path = get_database_path()
     
     conn = sqlite3.connect(db_path)
     # Enable foreign key support
@@ -151,7 +156,7 @@ def migrate_v2_projects_and_conversations(db_path: str = None) -> None:
     - code_versions: Stores saved versions of project code
     """
     if db_path is None:
-        db_path = DATABASE_PATH
+        db_path = get_database_path()
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -224,7 +229,7 @@ def migrate_v3_add_language(db_path: str = None) -> None:
     Default is 'p5js' for backwards compatibility.
     """
     if db_path is None:
-        db_path = DATABASE_PATH
+        db_path = get_database_path()
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -256,7 +261,7 @@ def migrate_v4_admin_columns(db_path: str = None) -> None:
     - Ensures existing users have appropriate roles
     """
     if db_path is None:
-        db_path = DATABASE_PATH
+        db_path = get_database_path()
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -298,7 +303,7 @@ def migrate_v5_project_files(db_path: str = None) -> None:
     - project_files: Stores design.md, architecture.md, todo.md, notes.md, code files
     """
     if db_path is None:
-        db_path = DATABASE_PATH
+        db_path = get_database_path()
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()

@@ -17,6 +17,7 @@ import pytest
 import uuid
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch, MagicMock
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -49,6 +50,20 @@ def setup_database(monkeypatch, tmp_path):
     
     # Cleanup - file will be deleted by tmp_path fixture
     _current_test_db = None
+
+
+@pytest.fixture(autouse=True)
+def reset_ai_client_singleton():
+    """
+    Reset the AI client singleton between tests to ensure isolation.
+    This prevents state leakage from one test to another.
+    """
+    # Reset the singleton before each test
+    import ai.client
+    ai.client._ai_client = None
+    yield
+    # Reset again after test
+    ai.client._ai_client = None
 
 
 @pytest.fixture
@@ -267,26 +282,37 @@ def test_project(project_factory):
     return project_factory()
 
 
-# ==================== Utility Fixtures ====================
+# ==================== Mock Fixtures ====================
 
 @pytest.fixture
-def create_multiple_users(test_user_factory):
+def mock_ai_client():
     """
-    Create multiple test users at once.
+    Fixture that provides a mock AI client for testing.
+    Automatically patches get_ai_client to return the mock.
     
     Usage:
-        def test_bulk(create_multiple_users):
-            users = create_multiple_users(5)
+        def test_chat(mock_ai_client, client, auth_headers):
+            mock_ai_client.generate_code.return_value = {...}
+            response = client.post(...)
     """
-    def _create_many(count=3):
-        users = []
-        for i in range(count):
-            pin = f'{1000 + i:04d}'
-            user = test_user_factory(pin=pin)
-            users.append(user)
-        return users
+    mock = MagicMock()
     
-    return _create_many
+    # Default successful response
+    mock.generate_code.return_value = {
+        'success': True,
+        'code': 'function setup() { createCanvas(400, 400); }',
+        'explanation': 'Test explanation',
+        'suggestions': ['Suggestion 1'],
+        'full_response': 'Test response',
+        'model': 'kimi-k2.5',
+        'tokens_used': 100,
+        'tool_calls': [],
+        'created_files': []
+    }
+    
+    with patch('chat.routes.get_ai_client', return_value=mock):
+        with patch('ai.client.get_ai_client', return_value=mock):
+            yield mock
 
 
 @pytest.fixture
@@ -312,3 +338,25 @@ function draw() {
         'model': 'kimi-k2.5',
         'tokens_used': 150
     }
+
+
+# ==================== Utility Fixtures ====================
+
+@pytest.fixture
+def create_multiple_users(test_user_factory):
+    """
+    Create multiple test users at once.
+    
+    Usage:
+        def test_bulk(create_multiple_users):
+            users = create_multiple_users(5)
+    """
+    def _create_many(count=3):
+        users = []
+        for i in range(count):
+            pin = f'{1000 + i:04d}'
+            user = test_user_factory(pin=pin)
+            users.append(user)
+        return users
+    
+    return _create_many

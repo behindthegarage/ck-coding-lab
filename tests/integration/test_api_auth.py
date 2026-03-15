@@ -15,6 +15,15 @@ import pytest
 import json
 
 
+@pytest.fixture(autouse=True)
+def reset_auth_rate_limit():
+    """Reset the auth rate limit store before each test."""
+    import routes
+    routes._rate_limit_store.clear()
+    yield
+    routes._rate_limit_store.clear()
+
+
 @pytest.mark.integration
 @pytest.mark.api
 @pytest.mark.auth
