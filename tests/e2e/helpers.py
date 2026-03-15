@@ -97,7 +97,7 @@ def send_chat(client, token, project_id, message, model='kimi-k2.5', enable_tool
         payload['enable_tools'] = True
     
     # Mock AI response for consistent testing
-    with patch('ai_client.get_ai_client') as mock_get_client:
+    with patch('chat.routes.get_ai_client') as mock_get_client:
         mock_ai = MagicMock()
         mock_ai.generate_code.return_value = {
             'success': True,
