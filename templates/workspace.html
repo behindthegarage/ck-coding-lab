@@ -4,15 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace - Club Kinawa Coding Lab</title>
-    <link rel="stylesheet" href="/lab/static/css/style.css?v=30">
-    <link rel="stylesheet" href="/lab/static/css/sidebar.css?v=30">
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=31">
+    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=31">
     <!-- p5.js for preview -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
 <body class="workspace-page">
     <header class="app-header">
         <div class="logo">
-            <a href="/lab/projects">← Back to Projects</a>
+            <button id="sidebar-toggle" class="header-btn" title="Toggle sidebar">☰</button>
+            <a href="/lab/projects">← Club Kinawa Coding Lab</a>
         </div>
         
         <div class="project-title">
@@ -26,11 +27,11 @@
         </div>
     </header>
     
-    <main class="workspace-with-sidebar">
-        <!-- Sidebar with Project Files -->
+    <main class="workspace-three-pane" id="workspace-container">
+        <!-- Left Sidebar: Project Files -->
         <aside class="project-sidebar" id="project-sidebar">
             <div class="sidebar-header">
-                <h3>📁 Project Files</h3>
+                <h3>📁 Files</h3>
             </div>
             
             <div class="file-tree" id="file-tree">
@@ -43,90 +44,83 @@
             </div>
         </aside>
         
-        <!-- Main Content Area -->
-        <div class="workspace-main">
-            <!-- Tab Navigation -->
-            <div class="tab-nav" id="tab-nav">
-                <button class="tab-btn active" data-tab="chat">💬 Chat</button>
-                <button class="tab-btn" data-tab="preview" id="preview-tab-btn">▶️ Preview</button>
-                <button class="tab-btn" data-tab="fileview" id="fileview-tab-btn" style="display: none;">📄 File</button>
+        <!-- Center: Chat -->
+        <section class="chat-pane" id="chat-pane">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <span class="chat-title">💬 Chat with Hari</span>
+                </div>
+                
+                <div id="chat-messages" class="chat-messages">
+                    <div class="chat-welcome">
+                        <p>👋 Welcome to your coding project!</p>
+                        <p>I'm Hari — your coding partner. I can read and write files to keep track of our work.</p>
+                        <p class="example">Try: "Make a game where a ball bounces" or "Let's plan this out first"</p>
+                    </div>
+                </div>
+                
+                <div class="chat-input-area">
+                    <div id="thinking-indicator" class="thinking hidden">
+                        <span class="spinner">⏳</span> Hari is thinking...
+                    </div>
+                    
+                    <div class="input-row">
+                        <textarea id="chat-input" placeholder="Describe what you want to build..." rows="2"></textarea>
+                        <button id="send-btn" class="btn-primary">Send</button>
+                    </div>
+                    
+                    <div class="chat-toolbar">
+                        <label class="upload-btn" title="Upload image or file">
+                            <input type="file" id="chat-upload" accept="image/*,.txt,.js,.html,.css,.py" hidden>
+                            📎 Upload
+                        </label>
+                        <span id="upload-preview" class="upload-preview hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Right: Preview -->
+        <aside class="preview-pane" id="preview-pane">
+            <div class="preview-header">
+                <span class="preview-title">🎮 Preview</span>
+                <div class="preview-controls">
+                    <button id="run-btn" class="btn-icon" title="Run">▶</button>
+                    <button id="fullscreen-btn" class="btn-icon" title="Fullscreen">⛶</button>
+                    <button id="refresh-preview-btn" class="btn-icon" title="Refresh">🔄</button>
+                    <button id="preview-toggle" class="btn-icon preview-close" title="Hide preview">→</button>
+                </div>
             </div>
             
-            <!-- Tab Content -->
-            <div class="tab-content">
-                
-                <!-- Chat Tab -->
-                <div id="chat-tab" class="tab-pane active">
-                    <div class="chat-container">
-                        <div id="chat-messages" class="chat-messages">
-                            <div class="chat-welcome">
-                                <p>👋 Welcome to your coding project!</p>
-                                <p>I'm Hari — your coding partner. I can read and write files to keep track of our work.</p>
-                                <p class="example">Try: "Make a game where a ball bounces" or "Let's plan this out first"</p>
-                            </div>
-                        </div>
-                        
-                        <div class="chat-input-area">
-                            <div id="thinking-indicator" class="thinking hidden">
-                                <span class="spinner">⏳</span> Hari is thinking...
-                            </div>
-                            
-                            <div class="input-row">
-                                <textarea id="chat-input" placeholder="Describe what you want to build..." rows="2"></textarea>
-                                <button id="send-btn" class="btn-primary">Send</button>
-                            </div>
-                            
-                            <div class="chat-toolbar">
-                                <label class="upload-btn" title="Upload image or file">
-                                    <input type="file" id="chat-upload" accept="image/*,.txt,.js,.html,.css,.py" hidden>
-                                    📎 Upload
-                                </label>
-                                <span id="upload-preview" class="upload-preview hidden"></span>
-                            </div>
-                            
-                            <div class="quick-actions" id="quick-actions">
-                                <button class="quick-btn" data-prompt="Make it faster">⚡ Faster</button>
-                                <button class="quick-btn" data-prompt="Add a score">🏆 Add Score</button>
-                                <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
-                                <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>
-                            </div>
-                        </div>
-                    </div>
+            <div class="preview-content">
+                <div id="preview-container">
+                    <p class="preview-placeholder">Your project preview will appear here.</p>
                 </div>
-                
-                
-                <!-- Preview Tab -->
-                <div id="preview-tab" class="tab-pane">
-                    <div class="preview-toolbar">
-                        <button id="run-btn" class="btn-small">▶️ Run</button>
-                        <button id="fullscreen-btn" class="btn-small">⛶ Fullscreen</button>
-                    </div>
-                    <div id="preview-container">
-                        <p class="preview-placeholder">Your project preview will appear here.</p>
-                    </div>
-                </div>
-                
-                <!-- File View Tab (for viewing project files) -->
-                <div id="fileview-tab" class="tab-pane">
-                    <div class="fileview-toolbar">
-                        <span id="fileview-filename" class="fileview-label">Select a file</span>
-                        <button id="fileview-close" class="btn-small">Close</button>
-                    </div>
-                    <div class="fileview-content">
-                        <pre id="fileview-display"><code>Click a file in the sidebar to view its contents.</code></pre>
-                    </div>
-                </div>
-                
             </div>
-        </div>
+        </aside>
+        
+        <!-- Mobile Preview Toggle (shown when preview is hidden on mobile) -->
+        <button id="show-preview-btn" class="show-preview-btn hidden" title="Show preview">
+            🎮 Preview
+        </button>
     </main>
+    
+    <!-- Quick Actions Bar (Bottom Dock) -->
+    <footer class="quick-actions-bar" id="quick-actions-bar">
+        <div class="quick-actions">
+            <button class="quick-btn" data-prompt="Make it faster">⚡ Faster</button>
+            <button class="quick-btn" data-prompt="Add a score">🏆 Add Score</button>
+            <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
+            <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>
+        </div>
+    </footer>
     
     <!-- File Content Modal -->
     <div id="file-modal" class="modal hidden">
         <div class="modal-content modal-large">
             <div class="modal-header">
                 <h3 id="modal-filename">File</h3>
-                <button class="modal-close" id="modal-close">&times;</button>
+                <button class="modal-close" id="modal-close">×</button>
             </div>
             <pre id="modal-file-content" class="modal-file-content"><code>Loading...</code></pre>
         </div>
@@ -134,6 +128,6 @@
     
     <script src="/lab/static/js/auth.js?v=4"></script>
     <script src="/lab/static/js/sandbox.js?v=25"></script>
-    <script src="/lab/static/js/workspace.js?v=33"></script>
+    <script src="/lab/static/js/workspace.js?v=34"></script>
 </body>
 </html>

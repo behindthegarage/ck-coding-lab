@@ -3,35 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Club Kinawa Coding Lab - Login</title>
-    <link rel="stylesheet" href="/lab/static/css/style.css?v=4">
+    <title>Welcome to Coding Lab</title>
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=5">
+    <style>
+        /* Login Page Redesign */
+        .login-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            padding: 20px;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            box-shadow: 0 25px 50px -12px rgba(139, 92, 246, 0.25),
+                        0 0 0 1px rgba(139, 92, 246, 0.1);
+            overflow: hidden;
+        }
+
+        .login-header {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6d28d9 100%);
+            padding: 2.5rem 2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .login-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.1) 0%, transparent 50%);
+        }
+
+        .login-brand {
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-brand .logo-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            display: block;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+        }
+
+        .login-brand h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: white;
+            margin: 0 0 0.5rem 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .login-brand p {
+            color: rgba(255,255,255,0.85);
+            font-size: 1rem;
+            margin: 0;
+            font-weight: 400;
+        }
+
+        .login-body {
+            padding: 2rem 2rem 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #94a3b8;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-wrapper .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.25rem;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.875rem 1rem 0.875rem 3rem;
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid rgba(71, 85, 105, 0.5);
+            border-radius: 12px;
+            color: #f8fafc;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-group input::placeholder {
+            color: #64748b;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            background: rgba(15, 23, 42, 1);
+            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
+        }
+
+        .form-group input:focus + .input-icon,
+        .input-wrapper:focus-within .input-icon {
+            opacity: 1;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4);
+            margin-top: 0.5rem;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+            background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .login-footer {
+            padding: 1rem 2rem 2rem;
+            text-align: center;
+        }
+
+        .login-hint {
+            color: #64748b;
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+        .login-hint .hint-icon {
+            margin-right: 0.5rem;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 0.875rem 1rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+            animation: shake 0.5s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .login-card {
+                margin: 10px;
+            }
+            
+            .login-header {
+                padding: 2rem 1.5rem;
+            }
+            
+            .login-brand .logo-icon {
+                font-size: 2.5rem;
+            }
+            
+            .login-brand h1 {
+                font-size: 1.5rem;
+            }
+            
+            .login-body,
+            .login-footer {
+                padding-left: 1.5rem;
+                padding-right: 1.5rem;
+            }
+        }
+    </style>
 </head>
 <body class="login-page">
-    <div class="login-container">
-        <div class="logo">
-            <h1>🎮 Club Kinawa</h1>
-            <h2>Coding Lab</h2>
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-brand">
+                <span class="logo-icon">💻</span>
+                <h1>Welcome to Coding Lab</h1>
+                <p>Club Kinawa's Creative Coding Space</p>
+            </div>
         </div>
         
-        <div class="login-form">
-            <h3>Log In</h3>
+        <div class="login-body">
+            <div id="error-message" class="error-message"></div>
             
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" placeholder="Your username" maxlength="50">
+                <div class="input-wrapper">
+                    <span class="input-icon">👤</span>
+                    <input type="text" id="username" placeholder="Enter your username" maxlength="50" autocomplete="username">
+                </div>
             </div>
             
             <div class="form-group">
-                <label for="pin">PIN (4 digits)</label>
-                <input type="password" id="pin" placeholder="••••" maxlength="4" pattern="\d{4}">
+                <label for="pin">PIN Code</label>
+                <div class="input-wrapper">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="pin" placeholder="••••" maxlength="4" pattern="\d{4}" inputmode="numeric" autocomplete="current-password">
+                </div>
             </div>
             
-            <button id="login-btn" class="btn-primary">Log In</button>
-            
-            <div id="error-message" class="error"></div>
+            <button id="login-btn" class="btn-login">Sign In</button>
         </div>
         
-        <p class="hint">Ask a staff member if you need help logging in!</p>
+        <div class="login-footer">
+            <p class="login-hint">
+                <span class="hint-icon">💡</span>
+                Ask a staff member if you need help!
+            </p>
+        </div>
     </div>
     
     <script src="/lab/static/js/auth.js?v=2"></script>

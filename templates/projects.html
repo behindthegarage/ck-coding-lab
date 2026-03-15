@@ -3,8 +3,541 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Projects - Club Kinawa Coding Lab</title>
-    <link rel="stylesheet" href="/lab/static/css/style.css?v=7">
+    <title>My Projects - Coding Lab</title>
+    <link rel="stylesheet" href="/lab/static/css/style.css?v=8">
+    <style>
+        /* Projects Page Redesign */
+        .projects-page {
+            background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%);
+            min-height: 100vh;
+        }
+
+        /* Header redesign */
+        .app-header {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .app-header .logo a {
+            color: #f8fafc;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .app-header .logo a:hover {
+            color: #a78bfa;
+        }
+
+        /* Projects container */
+        .projects-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Projects header */
+        .projects-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .projects-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #f8fafc;
+            margin: 0;
+        }
+
+        .projects-header h1 span {
+            color: #a78bfa;
+        }
+
+        /* New Project Button */
+        .btn-gradient {
+            padding: 0.875rem 1.5rem;
+            background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-gradient:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+            background: linear-gradient(135deg, #9333ea 0%, #db2777 100%);
+        }
+
+        .btn-gradient:active {
+            transform: translateY(0);
+        }
+
+        /* Projects Grid */
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Project Card */
+        .project-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .project-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px -10px rgba(139, 92, 246, 0.3);
+            border-color: rgba(139, 92, 246, 0.4);
+        }
+
+        .project-card-header {
+            padding: 1.25rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .project-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .project-icon.p5js {
+            background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+        }
+
+        .project-icon.html {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .project-icon.python {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .project-title-group {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .project-title-group h3 {
+            margin: 0 0 0.25rem 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .project-meta {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+
+        /* Language Badge */
+        .lang-badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .lang-badge.p5js {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .lang-badge.html {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .lang-badge.python {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        /* Project Body */
+        .project-body {
+            padding: 1.25rem;
+        }
+
+        .project-description {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Project Actions */
+        .project-actions {
+            padding: 1rem 1.25rem;
+            display: flex;
+            gap: 0.75rem;
+            background: rgba(15, 23, 42, 0.4);
+            border-top: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .btn-open {
+            flex: 1;
+            padding: 0.625rem 1rem;
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 8px;
+            color: #a78bfa;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-open:hover {
+            background: rgba(139, 92, 246, 0.25);
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+
+        .btn-menu {
+            padding: 0.625rem 1rem;
+            background: rgba(71, 85, 105, 0.3);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-menu:hover {
+            background: rgba(71, 85, 105, 0.5);
+            color: #e2e8f0;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #94a3b8;
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            color: #f8fafc;
+            margin: 0 0 0.5rem 0;
+        }
+
+        /* Loading state */
+        .loading-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #94a3b8;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(139, 92, 246, 0.2);
+            border-top-color: #8b5cf6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modal Redesign */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: rgba(30, 41, 59, 0.98);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: #f8fafc;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #94a3b8;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid rgba(71, 85, 105, 0.5);
+            border-radius: 10px;
+            color: #f8fafc;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Language Selector */
+        .language-selector {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+        }
+
+        .lang-option {
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.5);
+            border: 2px solid rgba(71, 85, 105, 0.3);
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .lang-option:hover {
+            border-color: rgba(139, 92, 246, 0.3);
+            background: rgba(139, 92, 246, 0.05);
+        }
+
+        .lang-option.active {
+            border-color: #8b5cf6;
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .lang-option .lang-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .lang-option .lang-name {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #f8fafc;
+            display: block;
+        }
+
+        .lang-option.active .lang-name {
+            color: #a78bfa;
+        }
+
+        .lang-option.p5js.active {
+            border-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .lang-option.p5js.active .lang-name {
+            color: #fbbf24;
+        }
+
+        .lang-option.html.active {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .lang-option.html.active .lang-name {
+            color: #60a5fa;
+        }
+
+        .lang-option.python.active {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .lang-option.python.active .lang-name {
+            color: #34d399;
+        }
+
+        /* Modal Actions */
+        .modal-actions {
+            padding: 1rem 1.5rem 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .modal-actions button {
+            flex: 1;
+            padding: 0.875rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-cancel {
+            background: rgba(71, 85, 105, 0.3);
+            color: #94a3b8;
+            border: 1px solid rgba(71, 85, 105, 0.5);
+        }
+
+        .btn-cancel:hover {
+            background: rgba(71, 85, 105, 0.5);
+            color: #e2e8f0;
+        }
+
+        .btn-create {
+            background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3);
+        }
+
+        .btn-create:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-create:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Error in modal */
+        .modal-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .modal-error.show {
+            display: block;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .projects-container {
+                padding: 1rem;
+            }
+
+            .projects-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .projects-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .language-selector {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body class="projects-page">
     <header class="app-header">
@@ -12,44 +545,75 @@
             <a href="/lab">🎮 Club Kinawa Coding Lab</a>
         </div>
         <div class="user-menu">
-            <span id="username-display"></span><a href="/admin" id="admin-link" class="hidden btn-small" style="margin-right:10px">Admin</a>
+            <span id="username-display"></span>
+            <a href="/admin" id="admin-link" class="hidden" style="margin-right:10px">Admin</a>
             <button id="logout-btn" class="btn-small">Log Out</button>
         </div>
     </header>
     
     <main class="projects-container">
         <div class="projects-header">
-            <h1>My Projects</h1>
-            <button id="new-project-btn" class="btn-primary">+ New Project</button>
+            <h1>My <span>Projects</span></h1>
+            <button id="new-project-btn" class="btn-gradient">
+                <span>+</span> New Project
+            </button>
         </div>
         
         <div id="projects-list" class="projects-grid">
-            <!-- Projects loaded dynamically -->
-            <div class="loading">Loading your projects...</div>
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Loading your projects...</p>
+            </div>
         </div>
     </main>
     
     <!-- New Project Modal -->
     <div id="new-project-modal" class="modal hidden">
         <div class="modal-content">
-            <h2>Create New Project</h2>
-            <div class="form-group">
-                <label for="project-name">Project Name</label>
-                <input type="text" id="project-name" placeholder="My Awesome Game" maxlength="100">
+            <div class="modal-header">
+                <h2>Create New Project</h2>
             </div>
-            <div class="form-group">
-                <label for="project-desc">What do you want to build?</label>
-                <textarea id="project-desc" placeholder="Describe your idea... a game, a website, a tool? We'll figure out the best way to build it together." maxlength="1000" rows="4"></textarea>
+            
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Choose a Language</label>
+                    <div class="language-selector">
+                        <div class="lang-option p5js active" data-lang="p5js">
+                            <span class="lang-icon">🎨</span>
+                            <span class="lang-name">p5.js</span>
+                        </div>
+                        <div class="lang-option html" data-lang="html">
+                            <span class="lang-icon">🌐</span>
+                            <span class="lang-name">HTML</span>
+                        </div>
+                        <div class="lang-option python" data-lang="python">
+                            <span class="lang-icon">🐍</span>
+                            <span class="lang-name">Python</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="project-name">Project Name</label>
+                    <input type="text" id="project-name" placeholder="My Awesome Game" maxlength="100">
+                </div>
+                
+                <div class="form-group">
+                    <label for="project-desc">What do you want to build?</label>
+                    <textarea id="project-desc" placeholder="Describe your idea... a game, a website, a tool? We'll figure out the best way to build it together." maxlength="1000" rows="3"></textarea>
+                </div>
+                
+                <div id="project-error" class="modal-error"></div>
             </div>
+            
             <div class="modal-actions">
-                <button id="cancel-project" class="btn-secondary">Cancel</button>
-                <button id="create-project" class="btn-primary">Start Building</button>
+                <button id="cancel-project" class="btn-cancel">Cancel</button>
+                <button id="create-project" class="btn-create">Start Building</button>
             </div>
-            <div id="project-error" class="error"></div>
         </div>
     </div>
     
     <script src="/lab/static/js/auth.js?v=2"></script>
-    <script src="/lab/static/js/projects.js?v=6"></script>
+    <script src="/lab/static/js/projects.js?v=7"></script>
 </body>
 </html>

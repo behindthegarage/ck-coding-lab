@@ -6,19 +6,24 @@ if (!isLoggedIn()) {
 }
 
 let projects = [];
-let selectedLanguage = 'undecided';
+let selectedLanguage = 'p5js';
 
 // Show admin link if user is admin
-    const user = getCurrentUser();
-    if (user && user.role === "admin") {
-        const adminLink = document.getElementById("admin-link");
-        if (adminLink) adminLink.classList.remove("hidden");
-    }
+const user = getCurrentUser();
+if (user && user.role === "admin") {
+    const adminLink = document.getElementById("admin-link");
+    if (adminLink) adminLink.classList.remove("hidden");
+}
 
-    // Load projects from API
+// Load projects from API
 async function loadProjects() {
     const container = document.getElementById('projects-list');
-    container.innerHTML = '<div class="loading">Loading your projects...</div>';
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading your projects...</p>
+        </div>
+    `;
 
     const data = await apiRequest('/projects');
 
@@ -28,35 +33,132 @@ async function loadProjects() {
 
     if (projects.length === 0) {
         container.innerHTML = `
-            <div class="loading">
-                <p>No projects yet!</p>
-                <p>Click "New Project" to get started.</p>
+            <div class="empty-state">
+                <div class="empty-state-icon">📁</div>
+                <h3>No projects yet!</h3>
+                <p>Click "New Project" to get started on something awesome.</p>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = projects.map(project => `
-        <div class="project-card" data-id="${project.id}">
-            <div class="project-card-header">
-                <h3>${escapeHtml(project.name)}</h3>
-                <span class="lang-badge">${project.language === 'html' ? '🌐 HTML' : '🎨 p5.js'}</span>
+    container.innerHTML = projects.map(project => {
+        const langIcon = getLanguageIcon(project.language);
+        const langBadgeClass = getLanguageBadgeClass(project.language);
+        const desc = project.description || 'No description';
+        const timeAgo = getTimeAgo(project.updated_at);
+        
+        return `
+            <div class="project-card" data-id="${project.id}">
+                <div class="project-card-header">
+                    <div class="project-icon ${langBadgeClass}">${langIcon}</div>
+                    <div class="project-title-group">
+                        <h3>${escapeHtml(project.name)}</h3>
+                        <div class="project-meta">Updated ${timeAgo}</div>
+                    </div>
+                    <span class="lang-badge ${langBadgeClass}">${project.language || 'p5js'}</span>
+                </div>
+                <div class="project-body">
+                    <p class="project-description">${escapeHtml(desc)}</p>
+                </div>
+                <div class="project-actions">
+                    <button class="btn-open" data-id="${project.id}">
+                        🚀 Open
+                    </button>
+                    <button class="btn-menu" data-id="${project.id}">
+                        ⋮
+                    </button>
+                </div>
             </div>
-            <p>${escapeHtml(project.description || 'No description')}</p>
-            <div class="meta">
-                <span>Created: ${formatDate(project.created_at)}</span>
-                <span>Updated: ${formatDate(project.updated_at)}</span>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 
-    // Add click handlers
+    // Add click handlers for Open buttons
+    document.querySelectorAll('.btn-open').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const projectId = btn.dataset.id;
+            window.location.href = `/lab/project/${projectId}`;
+        });
+    });
+
+    // Add click handlers for cards (click anywhere to open)
     document.querySelectorAll('.project-card').forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
+            // Don't navigate if clicking buttons
+            if (e.target.closest('.btn-open') || e.target.closest('.btn-menu')) {
+                return;
+            }
             const projectId = card.dataset.id;
             window.location.href = `/lab/project/${projectId}`;
         });
     });
+
+    // Menu button handlers (placeholder for future functionality)
+    document.querySelectorAll('.btn-menu').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const projectId = btn.dataset.id;
+            showProjectMenu(projectId);
+        });
+    });
+}
+
+// Get language icon
+function getLanguageIcon(lang) {
+    const icons = {
+        'p5js': '🎨',
+        'html': '🌐',
+        'python': '🐍',
+        'undecided': '💡'
+    };
+    return icons[lang] || icons['undecided'];
+}
+
+// Get language badge class
+function getLanguageBadgeClass(lang) {
+    const classes = {
+        'p5js': 'p5js',
+        'html': 'html',
+        'python': 'python',
+        'undecided': 'html'
+    };
+    return classes[lang] || 'html';
+}
+
+// Get time ago string
+function getTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    
+    const intervals = {
+        year: 31536000,
+        month: 2592000,
+        week: 604800,
+        day: 86400,
+        hour: 3600,
+        minute: 60
+    };
+    
+    for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+        const interval = Math.floor(seconds / secondsInUnit);
+        if (interval >= 1) {
+            return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
+        }
+    }
+    
+    return 'just now';
+}
+
+// Show project menu (placeholder)
+function showProjectMenu(projectId) {
+    // Future: Show dropdown menu with options like:
+    // - Rename
+    // - Duplicate
+    // - Delete
+    // - Share
+    console.log('Menu clicked for project:', projectId);
 }
 
 // Create new project
@@ -70,7 +172,9 @@ async function createProject() {
     const description = descInput.value.trim();
 
     if (!name) {
-        errorDiv.textContent = 'Project name is required.';
+        errorDiv.textContent = 'Please give your project a name.';
+        errorDiv.classList.add('show');
+        nameInput.focus();
         return;
     }
 
@@ -85,9 +189,10 @@ async function createProject() {
     if (data && data.success) {
         window.location.href = `/lab/project/${data.project.id}`;
     } else {
-        errorDiv.textContent = data?.error || 'Failed to create project.';
+        errorDiv.textContent = data?.error || 'Failed to create project. Please try again.';
+        errorDiv.classList.add('show');
         createBtn.disabled = false;
-        createBtn.textContent = 'Create';
+        createBtn.textContent = 'Start Building';
     }
 }
 
@@ -98,16 +203,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Helper: Format date
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-    });
-}
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     // Show admin link if user is admin
@@ -115,6 +210,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user && user.role === "admin") {
         const adminLink = document.getElementById("admin-link");
         if (adminLink) adminLink.classList.remove("hidden");
+    }
+
+    // Display username
+    const usernameDisplay = document.getElementById('username-display');
+    if (usernameDisplay && user) {
+        usernameDisplay.textContent = user.username;
     }
 
     // Load projects
@@ -136,19 +237,28 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('project-name').value = '';
         document.getElementById('project-desc').value = '';
         document.getElementById('project-error').textContent = '';
-        selectedLanguage = 'undecided';
-        document.querySelectorAll('.lang-pick').forEach(b => {
+        document.getElementById('project-error').classList.remove('show');
+        selectedLanguage = 'p5js';
+        document.querySelectorAll('.lang-option').forEach(b => {
             b.classList.toggle('active', b.dataset.lang === 'p5js');
         });
     });
 
+    // Close modal on backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            cancelBtn.click();
+        }
+    });
+
     // Language picker
-    document.querySelectorAll('.lang-pick').forEach(btn => {
+    document.querySelectorAll('.lang-option').forEach(btn => {
         btn.addEventListener('click', () => {
             selectedLanguage = btn.dataset.lang;
-            document.querySelectorAll('.lang-pick').forEach(b => {
-                b.classList.toggle('active', b === btn);
+            document.querySelectorAll('.lang-option').forEach(b => {
+                b.classList.remove('active');
             });
+            btn.classList.add('active');
         });
     });
 

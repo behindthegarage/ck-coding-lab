@@ -1,4 +1,5 @@
-// workspace.js - Main workspace with sidebar, file management, and agentic workflow
+// workspace.js - Three-pane layout with collapsible panels
+// Version 34 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -16,6 +17,10 @@ let currentCode = '';
 let sandboxRunner = null;
 let pendingUpload = null;
 let currentFileId = null;
+let sidebarCollapsed = false;
+let previewCollapsed = false;
+let isMobile = window.innerWidth < 768;
+let isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
 
 // Load project data
 async function loadProject() {
@@ -104,7 +109,7 @@ function loadFileTree() {
     });
 }
 
-// View a file's contents
+// View a file's contents (now opens in modal instead of tab)
 async function viewFile(fileId, filename) {
     currentFileId = fileId;
     
@@ -116,65 +121,145 @@ async function viewFile(fileId, filename) {
         }
     });
     
-    // Show file view tab
-    document.getElementById('fileview-tab-btn').style.display = 'inline-block';
-    document.getElementById('fileview-tab-btn').textContent = `📄 ${filename}`;
+    // Show modal
+    const modal = document.getElementById('file-modal');
+    const modalFilename = document.getElementById('modal-filename');
+    const modalContent = document.getElementById('modal-file-content');
     
-    // Update file view content
-    document.getElementById('fileview-filename').textContent = filename;
-    document.getElementById('fileview-display').textContent = 'Loading...';
-    
-    // Switch to file view tab
-    switchToTab('fileview');
+    modalFilename.textContent = filename;
+    modalContent.textContent = 'Loading...';
+    modal.classList.remove('hidden');
     
     // Fetch file content
     const data = await apiRequest(`/files/${fileId}`);
     
     if (data && data.success) {
-        document.getElementById('fileview-display').textContent = data.file.content || '// File is empty';
+        modalContent.textContent = data.file.content || '// File is empty';
     } else {
-        document.getElementById('fileview-display').textContent = 'Error loading file';
+        modalContent.textContent = 'Error loading file';
     }
 }
 
-// Close file view
-function closeFileView() {
-    document.getElementById('fileview-tab-btn').style.display = 'none';
+// Close file modal
+function closeFileModal() {
+    document.getElementById('file-modal').classList.add('hidden');
     document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
-    switchToTab('chat');
     currentFileId = null;
+}
+
+// Toggle sidebar
+function toggleSidebar() {
+    const sidebar = document.getElementById('project-sidebar');
+    const workspace = document.getElementById('workspace-container');
+    
+    sidebarCollapsed = !sidebarCollapsed;
+    
+    if (isMobile || isTablet) {
+        // On mobile/tablet, use slide-in overlay
+        if (sidebarCollapsed) {
+            sidebar.classList.remove('open');
+            workspace.classList.remove('sidebar-open');
+        } else {
+            sidebar.classList.add('open');
+            workspace.classList.add('sidebar-open');
+        }
+    } else {
+        // On desktop, collapse/expand
+        sidebar.classList.toggle('collapsed', sidebarCollapsed);
+    }
+    
+    // Save preference
+    localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
+}
+
+// Toggle preview panel
+function togglePreview() {
+    const preview = document.getElementById('preview-pane');
+    const showBtn = document.getElementById('show-preview-btn');
+    
+    previewCollapsed = !previewCollapsed;
+    
+    if (isMobile) {
+        // On mobile, use slide-in from right
+        if (previewCollapsed) {
+            preview.classList.remove('open');
+            showBtn.classList.remove('hidden');
+        } else {
+            preview.classList.add('open');
+            showBtn.classList.add('hidden');
+        }
+    } else {
+        // On desktop, collapse/expand
+        preview.classList.toggle('collapsed', previewCollapsed);
+    }
+    
+    // Save preference
+    localStorage.setItem('previewCollapsed', previewCollapsed);
+}
+
+// Handle window resize for responsive layout
+function handleResize() {
+    const newIsMobile = window.innerWidth < 768;
+    const newIsTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
+    
+    // Reset classes when crossing breakpoints
+    if (newIsMobile !== isMobile || newIsTablet !== isTablet) {
+        const sidebar = document.getElementById('project-sidebar');
+        const preview = document.getElementById('preview-pane');
+        const workspace = document.getElementById('workspace-container');
+        const showPreviewBtn = document.getElementById('show-preview-btn');
+        
+        // Reset sidebar
+        sidebar.classList.remove('open', 'collapsed');
+        workspace.classList.remove('sidebar-open');
+        
+        // Reset preview
+        preview.classList.remove('open');
+        
+        if (newIsMobile) {
+            // Mobile: start with preview hidden
+            previewCollapsed = true;
+            showPreviewBtn.classList.remove('hidden');
+        } else if (newIsTablet) {
+            // Tablet: no sidebar visible by default
+            sidebarCollapsed = true;
+            previewCollapsed = false;
+            showPreviewBtn.classList.add('hidden');
+        } else {
+            // Desktop: use saved preferences
+            sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            previewCollapsed = localStorage.getItem('previewCollapsed') === 'true';
+            sidebar.classList.toggle('collapsed', sidebarCollapsed);
+            preview.classList.toggle('collapsed', previewCollapsed);
+            showPreviewBtn.classList.add('hidden');
+        }
+    }
+    
+    isMobile = newIsMobile;
+    isTablet = newIsTablet;
 }
 
 // Update UI based on project type (p5js, html, or python)
 function updateProjectTypeUI(language) {
     const badge = document.getElementById('project-type-badge');
-    const codeLabel = document.getElementById('code-type-label');
-    const previewTabBtn = document.getElementById('preview-tab-btn');
-    const quickActions = document.getElementById('quick-actions');
     const welcome = document.querySelector('.chat-welcome');
+    const previewPane = document.getElementById('preview-pane');
     
     if (language === 'html') {
         if (badge) {
             badge.textContent = '🌐 HTML';
             badge.className = 'project-badge badge-html';
         }
-        if (codeLabel) {
-            codeLabel.textContent = 'HTML/CSS/JS (read-only)';
-        }
-        if (previewTabBtn) {
-            previewTabBtn.style.display = 'inline-block';
-        }
     } else if (language === 'python') {
         if (badge) {
             badge.textContent = '🐍 Python';
             badge.className = 'project-badge badge-python';
         }
-        if (codeLabel) {
-            codeLabel.textContent = 'Python (read-only)';
-        }
-        // Hide preview tab for Python projects
-        if (previewTabBtn) {
-            previewTabBtn.style.display = 'none';
+        // Hide preview pane for Python projects
+        if (previewPane) {
+            previewPane.style.display = 'none';
+            // Adjust grid to two columns
+            document.querySelector('.workspace-three-pane').style.gridTemplateColumns = '200px 1fr';
         }
         // Update welcome message for Python
         if (welcome) {
@@ -183,11 +268,14 @@ function updateProjectTypeUI(language) {
                 <p class="example">Try: "Make a script that generates random passwords" or "Check todo.md and let's plan"</p>`;
         }
         // Update quick actions for Python
+        const quickActions = document.querySelector('.quick-actions');
         if (quickActions) {
-            quickActions.innerHTML = `<button class="quick-btn" data-prompt="Add error handling">🛡️ Add Error Handling</button>
+            quickActions.innerHTML = `
+                <button class="quick-btn" data-prompt="Add error handling">🛡️ Add Error Handling</button>
                 <button class="quick-btn" data-prompt="Add comments explaining the code">💬 Add Comments</button>
                 <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
-                <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>`;
+                <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>
+            `;
             // Re-attach event listeners
             quickActions.querySelectorAll('.quick-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -202,16 +290,10 @@ function updateProjectTypeUI(language) {
             badge.textContent = '🎨 p5.js';
             badge.className = 'project-badge badge-p5js';
         }
-        if (codeLabel) {
-            codeLabel.textContent = 'JavaScript (read-only)';
-        }
-        if (previewTabBtn) {
-            previewTabBtn.style.display = 'inline-block';
-        }
         // Update welcome message for agentic workflow
         if (welcome) {
             welcome.innerHTML = `<p>👋 Welcome to your coding project!</p>
-                <p>I'm Hari — your coding partner. I read and write files to track our work.</p>
+                <p>I'm Hari — your coding partner. I read and write files to keep track of our work.</p>
                 <p class="example">Try: "Make a game where a ball bounces" or "Check todo.md and let's plan"</p>`;
         }
     }
@@ -367,15 +449,20 @@ async function sendMessage(message) {
                 currentCode = data.response.code;
                 updateCodeDisplay();
 
-                // Only auto-switch to preview for runnable languages
+                // Only auto-show preview for runnable languages
                 if (project.language !== 'python') {
-                    switchToTab('preview');
+                    // If preview is collapsed on desktop, expand it
+                    if (!isMobile && previewCollapsed) {
+                        togglePreview();
+                    }
                     runPreview();
                 }
             } else if (hasNewFiles) {
-                // If no main code but files were created, still run preview for multi-file projects
+                // If files were created, run preview
                 if (project.language !== 'python') {
-                    switchToTab('preview');
+                    if (!isMobile && previewCollapsed) {
+                        togglePreview();
+                    }
                     runPreview();
                 }
             }
@@ -389,7 +476,7 @@ async function sendMessage(message) {
             let createdFilesHtml = '';
             if (hasNewFiles) {
                 createdFilesHtml = `
-                    <div class="created-files-list" style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.1); border-radius: 6px;">
+                    <div class="created-files-list">
                         <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Created files:</p>
                         ${data.response.created_files.map(f => `
                             <div style="font-size: 0.875rem; color: var(--text-secondary);">
@@ -496,16 +583,13 @@ function handleFileUpload(file) {
     }
 }
 
-// Update code display in code tab
+// Update code display (kept for internal state)
 function updateCodeDisplay() {
-    const display = document.getElementById('code-display');
-    const editor = document.getElementById('code-editor');
-    
-    display.textContent = currentCode || '// Your code will appear here...';
-    editor.value = currentCode;
+    // Code display removed from UI, but keep state updated
+    // for preview functionality
 }
 
-// Run code in preview - Updated for multi-file project support
+// Run code in preview
 async function runPreview() {
     const container = document.getElementById('preview-container');
     
@@ -576,14 +660,11 @@ function buildPreviewBundle(files) {
     }
     
     // Replace script src references with inline content
-    // First, handle main.js and other JS files referenced via src
     const jsFiles = Object.keys(files).filter(f => f.endsWith('.js'));
     
     jsFiles.forEach(filename => {
         const jsContent = files[filename] || '';
-        // Match <script src="filename.js"> or <script src='filename.js'>
         const scriptRegex = new RegExp(`<script[^>]*src=["']${filename}["'][^>]*>\s*</script>`, 'gi');
-        // Replace with inline script
         const inlineScript = `<script data-file="${filename}">\n${jsContent}\n</script>`;
         indexHtml = indexHtml.replace(scriptRegex, inlineScript);
     });
@@ -591,14 +672,12 @@ function buildPreviewBundle(files) {
     // Inject any remaining JS files that weren't referenced via src
     let jsInjection = '';
     jsFiles.forEach(filename => {
-        // Check if already injected (now has data-file attribute)
         if (!indexHtml.includes(`data-file="${filename}"`)) {
             const jsContent = files[filename] || '';
             jsInjection += `\n<script data-file="${filename}">\n${jsContent}\n</script>\n`;
         }
     });
     
-    // Inject remaining JS before </body> or before </html> or at the end
     if (indexHtml.includes('</body>')) {
         indexHtml = indexHtml.replace('</body>', `${jsInjection}</body>`);
     } else if (indexHtml.includes('</html>')) {
@@ -634,7 +713,6 @@ function parseAssistantMessage(content) {
                 });
             }
         });
-        // Remove tool section from content for other parsing
         content = content.substring(0, content.indexOf('---\n\n**Tool Calls:**'));
     }
 
@@ -655,23 +733,6 @@ function parseAssistantMessage(content) {
     return result;
 }
 
-// Switch to a different tab
-function switchToTab(tabName) {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.tab === tabName) {
-            btn.classList.add('active');
-        }
-    });
-
-    document.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.remove('active');
-        if (pane.id === `${tabName}-tab`) {
-            pane.classList.add('active');
-        }
-    });
-}
-
 // Escape HTML for display
 function escapeHtml(text) {
     if (!text) return '';
@@ -690,13 +751,32 @@ function formatTime(timestamp) {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadProject();
+    
+    // Initialize responsive state
+    handleResize();
+    
+    // Listen for window resize
+    window.addEventListener('resize', handleResize);
 
-    // Tab switching
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tabName = btn.dataset.tab;
-            switchToTab(tabName);
-        });
+    // Sidebar toggle
+    document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
+
+    // Preview toggle (desktop) / close (mobile)
+    document.getElementById('preview-toggle').addEventListener('click', togglePreview);
+
+    // Show preview button (mobile only)
+    document.getElementById('show-preview-btn').addEventListener('click', () => {
+        previewCollapsed = false;
+        document.getElementById('preview-pane').classList.add('open');
+        document.getElementById('show-preview-btn').classList.add('hidden');
+    });
+
+    // Click outside sidebar to close (mobile/tablet overlay)
+    document.getElementById('workspace-container').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('workspace-container') && 
+            document.getElementById('workspace-container').classList.contains('sidebar-open')) {
+            toggleSidebar();
+        }
     });
 
     // Send button
@@ -729,6 +809,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Run button
     document.getElementById('run-btn').addEventListener('click', runPreview);
+    
+    // Refresh preview button
+    document.getElementById('refresh-preview-btn').addEventListener('click', runPreview);
 
     // Fullscreen button
     document.getElementById('fullscreen-btn').addEventListener('click', () => {
@@ -761,20 +844,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = '/lab/login';
     });
 
-    // Edit mode toggle
-    document.getElementById('edit-mode').addEventListener('change', (e) => {
-        const display = document.getElementById('code-display');
-        const editor = document.getElementById('code-editor');
-
-        if (e.target.checked) {
-            display.classList.add('hidden');
-            editor.classList.remove('hidden');
-        } else {
-            display.classList.remove('hidden');
-            editor.classList.add('hidden');
-        }
-    });
-
     // File upload
     document.getElementById('chat-upload').addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -783,14 +852,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // File view close button
-    document.getElementById('fileview-close').addEventListener('click', closeFileView);
+    // Modal close button
+    document.getElementById('modal-close').addEventListener('click', closeFileModal);
     
-    // New file button (placeholder for future)
+    // Close modal when clicking outside
+    document.getElementById('file-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('file-modal')) {
+            closeFileModal();
+        }
+    });
+    
+    // New file button
     document.getElementById('new-file-btn').addEventListener('click', () => {
         const filename = prompt('Enter filename (e.g., helper.js, styles.css):');
         if (filename && filename.trim()) {
-            // For now, just show a message - actual file creation would need backend support
             alert(`To create ${filename.trim()}, ask me to write it for you!\n\nTry: "Create a file called ${filename.trim()} with [what you want in it]"`);
         }
     });
