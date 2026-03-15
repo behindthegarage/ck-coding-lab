@@ -11,9 +11,11 @@ from flask import Flask, g, request, send_from_directory
 from database import init_db_full
 from auth import cleanup_expired_sessions
 from routes import auth_bp
-from project_routes import project_bp
+from projects import project_bp
 from admin_routes import admin_bp, api_admin_bp
 from file_routes import file_bp
+from chat import chat_bp
+from versions import versions_bp
 
 
 def create_app(test_config: dict = None) -> Flask:
@@ -54,6 +56,8 @@ def create_app(test_config: dict = None) -> Flask:
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(project_bp)
+    app.register_blueprint(chat_bp)
+    app.register_blueprint(versions_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_admin_bp)
     app.register_blueprint(file_bp)
