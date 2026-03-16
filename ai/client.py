@@ -5,6 +5,7 @@ Uses Anthropic Messages API format with tool use support.
 """
 
 import json
+import os
 from typing import List, Dict, Optional
 
 import requests
@@ -31,7 +32,10 @@ class AIClient:
     
     def __init__(self):
         # Kimi API configuration
-        self.api_key = get_api_key()
+        self.provider = "kimi"
+        self.api_key = os.environ.get("KIMI_API_KEY")
+        if not self.api_key:
+            raise ValueError("KIMI_API_KEY environment variable is required")
         self.base_url = KIMI_BASE_URL
         self.model = KIMI_MODEL
         
