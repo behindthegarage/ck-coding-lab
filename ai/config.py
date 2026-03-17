@@ -9,7 +9,10 @@ import os
 # API Configuration
 KIMI_BASE_URL = "https://api.kimi.com/coding"
 KIMI_MODEL = "k2p5"  # Kimi K2.5 model ID
-DEFAULT_MAX_TOKENS = 4096
+# 4096 was clipping larger HTML/JS game generations mid-file, which meant
+# filename-tagged code blocks never closed and nothing got persisted to
+# project_files. Give the model more room for full multi-hundred-line outputs.
+DEFAULT_MAX_TOKENS = 8192
 DEFAULT_TEMPERATURE = 0.7
 
 # Language-specific context appended to agent.md

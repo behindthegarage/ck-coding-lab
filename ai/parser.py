@@ -37,8 +37,15 @@ def parse_response(
     # STEP 1: Extract file declarations from code blocks
     # Pattern: ```language filename or ```language [filename]
     # Examples: ```html index.html, ```css style.css, ```js main.js
-    file_pattern = r'```(html|css|js|javascript|python|py)\s*\[?([^\]\n]+)\]?\s*\n(.*?)```'
-    file_matches = re.findall(file_pattern, content, re.DOTALL)
+    #
+    # Important: some model responses get clipped before the closing ``` fence.
+    # When that happens we still want to recover and save the file content
+    # instead of silently dropping it.
+    file_start_pattern = re.compile(
+        r'```(html|css|js|javascript|python|py)\s+\[?([^\]\n]+)\]?\s*\n',
+        re.DOTALL
+    )
+    file_starts = list(file_start_pattern.finditer(content))
     
     # Also look for "File: filename" pattern before code blocks
     file_prefix_pattern = r'(?:File|file):\s*([\w.\-/]+)\s*\n```(html|css|js|javascript|python|py)?\s*\n(.*?)```'
@@ -46,10 +53,25 @@ def parse_response(
     
     all_files = []
     
-    # Process filename-in-codeblock pattern
-    for lang, filename, file_content in file_matches:
-        filename = filename.strip()
-        if filename and file_content:
+    # Process filename-in-codeblock pattern, tolerating missing closing fences
+    for i, match in enumerate(file_starts):
+        lang = match.group(1)
+        filename = match.group(2).strip()
+        content_start = match.end()
+        next_start = file_starts[i + 1].start() if i + 1 < len(file_starts) else len(content)
+        segment = content[content_start:next_start]
+        
+        closing_match = re.search(r'\n```\s*(?:\n|$)', segment)
+        if closing_match:
+            file_content = segment[:closing_match.start()]
+        else:
+            tool_summary_idx = segment.find('\n---\n\n**Tool Calls:**')
+            if tool_summary_idx != -1:
+                file_content = segment[:tool_summary_idx]
+            else:
+                file_content = segment
+        
+        if filename and file_content.strip():
             all_files.append({
                 'filename': filename,
                 'content': file_content.strip(),

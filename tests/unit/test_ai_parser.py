@@ -11,6 +11,8 @@ Tests cover:
 import pytest
 import re
 
+from ai.parser import parse_response
+
 
 @pytest.mark.unit
 class TestCodeExtraction:
@@ -217,6 +219,92 @@ class TestToolCallParsing:
         
         assert tool_call['result']['success'] is False
         assert 'error' in tool_call['result']
+
+
+@pytest.mark.unit
+class TestParserFileRecovery:
+    """Tests for recovering filename-tagged files from imperfect model output."""
+
+    def test_saves_filename_tagged_file_without_closing_fence(self, db_connection):
+        """If the model response is clipped, recover and persist the file anyway."""
+        db_connection.execute('''
+            INSERT INTO users (username, pin_hash, role, is_active)
+            VALUES (?, ?, ?, ?)
+        ''', ('parser_user', 'hash', 'kid', 1))
+        user_id = db_connection.lastrowid
+
+        db_connection.execute('''
+            INSERT INTO projects (user_id, name, description, language)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, 'Parser Test', 'Recover truncated file', 'html'))
+        project_id = db_connection.lastrowid
+        db_connection.connection.commit()
+
+        content = '''
+Here you go — writing the file now.
+
+```html index.html
+<!DOCTYPE html>
+<html>
+  <head><title>Recovered</title></head>
+  <body>Hello</body>
+</html>
+'''
+
+        result = parse_response(content, 'html', project_id)
+
+        assert any(f['filename'] == 'index.html' for f in result['created_files'])
+
+        db_connection.execute(
+            'SELECT content FROM project_files WHERE project_id = ? AND filename = ?',
+            (project_id, 'index.html')
+        )
+        saved = db_connection.fetchone()
+        assert saved is not None
+        assert '<title>Recovered</title>' in saved['content']
+
+    def test_ignores_tool_summary_when_recovering_truncated_file(self, db_connection):
+        """Tool call summaries should not be written into recovered file contents."""
+        db_connection.execute('''
+            INSERT INTO users (username, pin_hash, role, is_active)
+            VALUES (?, ?, ?, ?)
+        ''', ('parser_user_2', 'hash', 'kid', 1))
+        user_id = db_connection.lastrowid
+
+        db_connection.execute('''
+            INSERT INTO projects (user_id, name, description, language)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, 'Parser Test 2', 'Ignore tool summary', 'html'))
+        project_id = db_connection.lastrowid
+        db_connection.connection.commit()
+
+        content = '''
+The file wasn't created. Let me write it properly now:
+
+```html index.html
+<!DOCTYPE html>
+<html>
+  <body>Asteroids</body>
+</html>
+
+---
+
+**Tool Calls:**
+- `read_file`: index.html → executed
+'''
+
+        result = parse_response(content, 'html', project_id)
+
+        assert any(f['filename'] == 'index.html' for f in result['created_files'])
+
+        db_connection.execute(
+            'SELECT content FROM project_files WHERE project_id = ? AND filename = ?',
+            (project_id, 'index.html')
+        )
+        saved = db_connection.fetchone()
+        assert saved is not None
+        assert '**Tool Calls:**' not in saved['content']
+        assert 'read_file' not in saved['content']
 
 
 @pytest.mark.unit

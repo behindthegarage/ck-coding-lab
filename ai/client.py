@@ -268,7 +268,7 @@ class AIClient:
                 f"{self.base_url}/v1/messages",
                 headers=headers,
                 json=data,
-                timeout=120
+                timeout=600
             )
             
             if response.status_code == 200:
@@ -322,7 +322,7 @@ class AIClient:
                 f"{self.base_url}/v1/messages",
                 headers=headers,
                 json=data,
-                timeout=120
+                timeout=600
             )
             
             print(f"Response status: {response.status_code}")
