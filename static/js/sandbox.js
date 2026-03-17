@@ -1,4 +1,8 @@
 // sandbox.js - Secure client-side code execution
+// Preview iframes must keep an opaque origin so user code cannot read
+// CK Coding Lab auth/session state from the parent app.
+
+const PREVIEW_SANDBOX_PERMISSIONS = 'allow-scripts';
 
 class SandboxRunner {
     constructor(containerId) {
@@ -56,7 +60,7 @@ class SandboxRunner {
         this.iframe.style.width = '100%';
         this.iframe.style.height = '100%';
         this.iframe.style.border = 'none';
-        this.iframe.sandbox = 'allow-scripts allow-same-origin';
+        this.iframe.sandbox = PREVIEW_SANDBOX_PERMISSIONS;
         
         this.container.innerHTML = '';
         this.container.appendChild(this.iframe);
@@ -81,7 +85,7 @@ class SandboxRunner {
         this.iframe.style.width = '100%';
         this.iframe.style.height = '100%';
         this.iframe.style.border = 'none';
-        this.iframe.sandbox = 'allow-scripts allow-same-origin';
+        this.iframe.sandbox = PREVIEW_SANDBOX_PERMISSIONS;
         
         this.container.innerHTML = '';
         this.container.appendChild(this.iframe);
@@ -279,7 +283,9 @@ class SandboxRunner {
     }
     
     handleMessage(event) {
-        if (!event.data) return;
+        if (!event.data || !this.iframe || event.source !== this.iframe.contentWindow) {
+            return;
+        }
         
         if (event.data.type === 'error') {
             console.error('Sandbox error:', event.data.message);
