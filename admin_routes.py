@@ -164,6 +164,7 @@ def admin_update_user(user_id):
 
 
 @admin_bp.route('/users/<int:user_id>/delete', methods=['POST'])
+@admin_web_required
 def admin_delete_user(user_id):
     """Soft delete (deactivate) a user."""
     current_admin = g.current_user
@@ -202,6 +203,49 @@ def api_admin_users():
     """Get all users with project counts as JSON."""
     users = get_users_with_project_counts()
     return jsonify({"success": True, "users": users})
+
+
+@api_admin_bp.route('/users', methods=['POST'])
+@require_admin
+def api_admin_create_user():
+    """Create a new user as an admin via JSON API."""
+    if not request.is_json:
+        return jsonify({"success": False, "error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    pin = data.get('pin', '').strip()
+    role = data.get('role', 'kid')
+
+    if not username or not pin:
+        return jsonify({"success": False, "error": "Username and PIN are required"}), 400
+
+    try:
+        user = create_user(username, pin, role)
+        return jsonify({"success": True, "user": user}), 201
+    except UserExistsError as e:
+        return jsonify({"success": False, "error": str(e)}), 409
+    except (AuthError, InvalidPINError) as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@api_admin_bp.route('/users/<int:user_id>/deactivate', methods=['POST'])
+@require_admin
+def api_admin_deactivate_user(user_id):
+    """Deactivate a user account as an admin via JSON API."""
+    current_admin = g.current_user
+    if current_admin['id'] == user_id:
+        return jsonify({"success": False, "error": "You cannot deactivate your own account."}), 400
+
+    if is_last_admin(user_id):
+        return jsonify({"success": False, "error": "Cannot deactivate the last admin."}), 400
+
+    user = get_user_by_id_safe(user_id)
+    if not user:
+        return jsonify({"success": False, "error": "User not found."}), 404
+
+    delete_user(user_id)
+    return jsonify({"success": True, "user": get_user_by_id_safe(user_id)})
 
 
 # ============== HELPER FUNCTIONS ==============

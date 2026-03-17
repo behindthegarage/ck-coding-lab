@@ -29,65 +29,88 @@ def reset_auth_rate_limit():
 @pytest.mark.auth
 class TestRegistrationAPI:
     """Tests for the registration endpoint."""
-    
-    def test_register_success(self, client):
-        """Test successful user registration."""
+
+    def test_register_requires_admin_when_self_registration_disabled(self, client):
+        """Public self-registration should be blocked by default."""
         response = client.post('/api/auth/register',
                               json={'username': 'newkid', 'pin': '1234'})
-        
+
+        assert response.status_code == 403
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'disabled' in data['error'].lower()
+
+    def test_register_success_for_admin(self, client, admin_auth_headers):
+        """Admins can create users through the registration endpoint."""
+        response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
+                              json={'username': 'newkid', 'pin': '1234'})
+
         assert response.status_code == 201
         data = response.get_json()
         assert data['success'] is True
         assert 'user' in data
         assert data['user']['username'] == 'newkid'
+        assert data['user']['role'] == 'kid'
         assert 'id' in data['user']
-        assert 'pin_hash' not in data['user']  # Security check
-    
-    def test_register_missing_fields(self, client):
-        """Test registration with missing fields."""
-        # Missing username
+        assert 'pin_hash' not in data['user']
+
+    def test_register_admin_role_requires_admin_auth(self, client, admin_auth_headers):
+        """Only admins may create admin users."""
         response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
+                              json={'username': 'newadmin', 'pin': '1234', 'role': 'admin'})
+
+        assert response.status_code == 201
+        assert response.get_json()['user']['role'] == 'admin'
+
+    def test_register_missing_fields(self, client, admin_auth_headers):
+        """Test registration with missing fields."""
+        response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
                               json={'pin': '1234'})
         assert response.status_code == 400
         assert response.get_json()['success'] is False
-        
-        # Missing PIN
+
         response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
                               json={'username': 'newkid'})
         assert response.status_code == 400
         assert response.get_json()['success'] is False
-    
-    def test_register_invalid_pin_format(self, client):
+
+    def test_register_invalid_pin_format(self, client, admin_auth_headers):
         """Test registration with invalid PIN format."""
         invalid_pins = ['123', '12345', 'abcd', '12ab', '']
-        
+
         for pin in invalid_pins:
             response = client.post('/api/auth/register',
+                                  headers=admin_auth_headers,
                                   json={'username': f'user_{pin}', 'pin': pin})
             assert response.status_code == 400, f"PIN '{pin}' should be rejected"
             assert response.get_json()['success'] is False
-    
-    def test_register_duplicate_username(self, client):
+
+    def test_register_duplicate_username(self, client, admin_auth_headers):
         """Test registration with duplicate username."""
-        # First registration
         response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
                               json={'username': 'duplicate', 'pin': '1234'})
         assert response.status_code == 201
-        
-        # Duplicate registration
+
         response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
                               json={'username': 'duplicate', 'pin': '5678'})
         assert response.status_code == 409
         data = response.get_json()
         assert data['success'] is False
         assert 'already taken' in data['error'].lower()
-    
-    def test_register_non_json_request(self, client):
+
+    def test_register_non_json_request(self, client, admin_auth_headers):
         """Test registration with non-JSON request."""
         response = client.post('/api/auth/register',
+                              headers=admin_auth_headers,
                               data='username=test&pin=1234',
                               content_type='application/x-www-form-urlencoded')
-        
+
         assert response.status_code == 400
         assert response.get_json()['success'] is False
 
@@ -296,16 +319,11 @@ class TestCompleteAuthFlow:
     """End-to-end authentication flow tests."""
     
     def test_full_auth_flow(self, client, test_user_factory):
-        """Test complete registration → login → access → logout flow."""
+        """Test complete create → login → access → logout flow."""
         import uuid
         
         username = f'flow_{uuid.uuid4().hex[:8]}'
-        
-        # 1. Register
-        response = client.post('/api/auth/register',
-                              json={'username': username, 'pin': '1234'})
-        assert response.status_code == 201
-        user_id = response.get_json()['user']['id']
+        test_user_factory(username=username, pin='1234')
         
         # 2. Login
         response = client.post('/api/auth/login',
@@ -334,9 +352,7 @@ class TestCompleteAuthFlow:
         import uuid
         
         username = f'multi_{uuid.uuid4().hex[:8]}'
-        
-        # Create user
-        client.post('/api/auth/register', json={'username': username, 'pin': '5555'})
+        test_user_factory(username=username, pin='5555')
         
         # Login twice
         response1 = client.post('/api/auth/login',

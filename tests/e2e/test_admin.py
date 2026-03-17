@@ -11,6 +11,8 @@ from .helpers import (
     register_user,
     login_user,
     create_project,
+    create_user_as_admin,
+    deactivate_user,
     get_admin_stats,
     get_admin_users,
     generate_unique_username
@@ -53,9 +55,9 @@ class TestAdminWorkflow:
         admin_usernames = [u['username'] for u in users]
         assert test_admin['username'] in admin_usernames
         
-        # Step 4: Create a new user (via regular registration)
+        # Step 4: Create a new user via admin API
         new_username = generate_unique_username('admincreated')
-        new_user = register_user(client, new_username, '4321')
+        new_user = create_user_as_admin(client, admin_token, new_username, '4321')
         assert new_user['username'] == new_username
         
         # Step 5: Verify user appears in list
@@ -75,7 +77,7 @@ class TestAdminWorkflow:
         
         # Create a regular user with projects
         user = generate_unique_username('projectuser')
-        register_user(client, user, '1234')
+        create_user_as_admin(client, admin_token, user, '1234')
         user_token = login_user(client, user, '1234')
         
         # Create projects for this user
@@ -135,11 +137,10 @@ class TestAdminWorkflow:
         
         # Create admin and kid users
         admin_user = generate_unique_username('testadmin')
-        register_user(client, admin_user, '1234')  # Creates as kid by default
-        # Note: role changes would need direct DB manipulation or admin UI
+        create_user_as_admin(client, admin_token, admin_user, '1234', role='admin')
         
         kid_user = generate_unique_username('testkid')
-        register_user(client, kid_user, '5678')
+        create_user_as_admin(client, admin_token, kid_user, '5678')
         
         # Get users
         users = get_admin_users(client, admin_token)
@@ -159,7 +160,7 @@ class TestAdminWorkflow:
         
         # Create a user and add activity
         user = generate_unique_username('activeuser')
-        register_user(client, user, '1234')
+        create_user_as_admin(client, admin_token, user, '1234')
         user_token = login_user(client, user, '1234')
         
         # Create a project
@@ -187,15 +188,17 @@ class TestAdminWorkflow:
     
     def test_admin_cannot_be_deleted(self, client, test_admin):
         """Test that the last admin cannot be deactivated (safety check)."""
-        # This tests the is_last_admin logic
-        # The actual deactivation would require UI interaction
-        # For API test, we verify the helper function exists and works
-        
         admin_token = login_user(client, test_admin['username'], '5678')
-        
-        # Get admin stats to verify at least one admin exists
-        stats = get_admin_stats(client, admin_token)
-        assert stats['admin_count'] >= 1
+
+        response = client.post(
+            f"/api/admin/users/{test_admin['id']}/deactivate",
+            headers={'Authorization': f'Bearer {admin_token}'}
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'own account' in data['error'].lower() or 'last admin' in data['error'].lower()
     
     def test_unauthenticated_cannot_access_admin(self, client):
         """Test that unauthenticated requests cannot access admin endpoints."""
@@ -223,7 +226,7 @@ class TestAdminWorkflow:
         usernames = []
         for i in range(3):
             username = generate_unique_username(f'sequser{i}')
-            register_user(client, username, '1234')
+            create_user_as_admin(client, admin_token, username, '1234')
             usernames.append(username)
         
         # Get updated list

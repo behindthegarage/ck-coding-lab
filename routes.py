@@ -5,7 +5,7 @@ Club Kinawa Coding Lab - Authentication System
 Provides REST API endpoints for authentication:
 - POST /api/auth/login - Authenticate and create session
 - POST /api/auth/logout - Invalidate session
-- POST /api/auth/register - Create new user (staff only)
+- POST /api/auth/register - Create new user (admin-only unless self-registration is explicitly enabled)
 - GET /api/auth/me - Get current user info
 
 All endpoints return JSON with consistent structure:
@@ -15,7 +15,7 @@ All endpoints return JSON with consistent structure:
 
 import re
 from functools import wraps
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from datetime import datetime
 from auth import (
     create_user, authenticate, create_session, validate_session, invalidate_session,
@@ -78,6 +78,51 @@ def record_attempt(ip: str) -> None:
     if ip not in _rate_limit_store:
         _rate_limit_store[ip] = []
     _rate_limit_store[ip].append(now)
+
+
+def require_admin_for_registration():
+    """
+    Enforce admin auth when self-registration is disabled.
+
+    Returns:
+        tuple[dict | None, Response | None]: (admin_user, error_response)
+    """
+    if current_app.config.get('ALLOW_SELF_REGISTRATION', False):
+        return None, None
+
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None, (
+            jsonify({
+                'success': False,
+                'error': 'Self-registration is disabled. Admin access required.'
+            }),
+            403,
+        )
+
+    token = auth_header[7:]
+    user = validate_session(token)
+    if not user:
+        return None, (
+            jsonify({
+                'success': False,
+                'error': 'Invalid or expired session'
+            }),
+            401,
+        )
+
+    if user.get('role') != 'admin':
+        return None, (
+            jsonify({
+                'success': False,
+                'error': 'Admin access required'
+            }),
+            403,
+        )
+
+    g.current_user = user
+    g.current_token = token
+    return user, None
 
 
 # API Routes
@@ -196,13 +241,18 @@ def register():
     """
     POST /api/auth/register
     
-    Create a new user account. 
-    Note: Currently open for development. In production, add @require_staff decorator.
+    Create a new user account.
+
+    Security model:
+    - Self-registration is disabled by default.
+    - When disabled, only authenticated admins may create accounts.
+    - When explicitly enabled via config, requests may create kid accounts only.
     
     Request Body (JSON):
         {
             "username": "string",
-            "pin": "4-digit PIN"
+            "pin": "4-digit PIN",
+            "role": "kid|admin"   # admin-only when self-registration is disabled
         }
     
     Response:
@@ -217,9 +267,13 @@ def register():
                     "last_login": null
                 }
             }
-        Error (400/409):
+        Error (400/401/403/409):
             {"success": false, "error": "error message"}
     """
+    admin_user, error_response = require_admin_for_registration()
+    if error_response:
+        return error_response
+
     # Validate request body
     if not request.is_json:
         return jsonify({
@@ -230,6 +284,7 @@ def register():
     data = request.get_json()
     username = data.get('username', '').strip()
     pin = data.get('pin', '')
+    role = data.get('role', 'kid')
     
     if not username or not pin:
         return jsonify({
@@ -243,9 +298,13 @@ def register():
             'success': False,
             'error': 'PIN must be exactly 4 digits (0000-9999)'
         }), 400
+
+    # Self-registration may only create kid accounts.
+    if admin_user is None:
+        role = 'kid'
     
     try:
-        user = create_user(username, pin)
+        user = create_user(username, pin, role)
         return jsonify({
             'success': True,
             'user': user

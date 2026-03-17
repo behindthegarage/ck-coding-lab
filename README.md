@@ -66,6 +66,7 @@ ck-coding-lab/
 |----------|-------------|---------|
 | `SECRET_KEY` | Flask secret key | `dev-secret-key-change-in-production` |
 | `CKCL_DB_PATH` | SQLite database path | `ckcl.db` |
+| `CKCL_ALLOW_SELF_REGISTRATION` | Allow public self-registration (`true`/`false`) | `false` |
 | `OPENCLAW_GATEWAY_URL` | OpenClaw API gateway | `http://localhost:18789` |
 
 ## API Endpoints
@@ -73,8 +74,14 @@ ck-coding-lab/
 ### Authentication
 - `POST /api/auth/login` - Login with username/PIN
 - `POST /api/auth/logout` - Logout
-- `POST /api/auth/register` - Create user (staff)
+- `POST /api/auth/register` - Create user (admin-only by default; public self-registration can be explicitly enabled)
 - `GET /api/auth/me` - Get current user
+
+### Admin
+- `GET /api/admin/stats` - Admin dashboard metrics
+- `GET /api/admin/users` - List users with project counts
+- `POST /api/admin/users` - Create user as admin
+- `POST /api/admin/users/<id>/deactivate` - Deactivate user as admin
 
 ### Projects
 - `GET /api/projects` - List user's projects
@@ -96,6 +103,9 @@ ck-coding-lab/
 
 - PIN-based authentication (4 digits, bcrypt hashed)
 - Session tokens with 24-hour expiry
+- Public self-registration disabled by default; admins create accounts unless explicitly overridden
+- Admin web delete route explicitly protected; admin JSON endpoints available for account management
+- Deactivating a user revokes active sessions
 - Code validation blocks dangerous patterns (eval, fetch, etc.)
 - iframe sandbox with frame limit protection
 - No network access from sandbox
@@ -209,18 +219,36 @@ cp .env.example .env
 ## Development
 
 ```bash
-# Run locally (port 5000)
-python app.py
+# Persistent local dev server on port 5006 (recommended)
+make dev
+make status
+make restart
+make stop
+make logs
+make health
+
+# Equivalent direct script form
+./scripts/dev-server.sh start
+./scripts/dev-server.sh status
+./scripts/dev-server.sh restart
+./scripts/dev-server.sh stop
+./scripts/dev-server.sh logs
+
+# One-off foreground run if you want terminal-bound Flask
+flask --app app run --port 5006 --debug
 
 # Run tests
+make test
 python test_auth.py
 python test_sandbox.py
 
 # Test API
-curl -X POST http://localhost:5000/api/auth/login \
+curl -X POST http://127.0.0.1:5006/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "test", "pin": "1234"}'
 ```
+
+The persistent local runner installs a `systemd --user` unit from `ck-coding-lab-local.service`, so the app keeps running after the launching shell exits. `Makefile` adds short aliases for the common dev commands.
 
 ## Troubleshooting
 

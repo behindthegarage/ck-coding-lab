@@ -338,8 +338,10 @@ def update_user(user_id: int, **kwargs) -> Optional[dict]:
     if 'role' in kwargs:
         validate_role(kwargs['role'])
         updates['role'] = kwargs['role']
+    deactivating_user = False
     if 'is_active' in kwargs:
         updates['is_active'] = 1 if kwargs['is_active'] else 0
+        deactivating_user = not kwargs['is_active']
     
     if not updates:
         return get_user_by_id(user_id)
@@ -350,15 +352,17 @@ def update_user(user_id: int, **kwargs) -> Optional[dict]:
         values = list(updates.values()) + [user_id]
         
         db.execute(f"UPDATE users SET {fields} WHERE id = ?", values)
-        
+
         if db.rowcount > 0:
+            if deactivating_user:
+                db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             return get_user_by_id(user_id)
         return None
 
 
 def delete_user(user_id: int) -> bool:
     """
-    Soft delete a user by setting is_active to 0.
+    Soft delete a user by setting is_active to 0 and revoking sessions.
     
     Args:
         user_id: User ID to delete
@@ -368,7 +372,10 @@ def delete_user(user_id: int) -> bool:
     """
     with get_db() as db:
         db.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
-        return db.rowcount > 0
+        updated = db.rowcount > 0
+        if updated:
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        return updated
 
 
 # ============== DECORATORS ==============

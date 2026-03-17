@@ -7,24 +7,27 @@ import uuid
 from unittest.mock import patch, MagicMock
 
 
-def register_user(client, username, pin):
+def register_user(client, username, pin, role='kid'):
     """
-    Register a new user.
+    Create a test user directly in the database.
+
+    This helper is for end-to-end setup, not for exercising the public
+    registration API. Public self-registration is disabled by default.
     
     Args:
-        client: Flask test client
+        client: Flask test client (unused; kept for call-site compatibility)
         username: Username for the new user
         pin: 4-digit PIN
+        role: User role ('kid' by default)
     
     Returns:
-        dict: User data from registration response
+        dict: Created user data
     """
-    response = client.post('/api/auth/register',
-                          json={'username': username, 'pin': pin})
-    assert response.status_code == 201, f"Registration failed: {response.get_json()}"
-    data = response.get_json()
-    assert data['success'] is True
-    return data['user']
+    from auth import create_user
+
+    user = create_user(username, pin, role)
+    assert user['username'] == username
+    return user
 
 
 def login_user(client, username, pin):
@@ -266,7 +269,7 @@ def delete_project(client, token, project_id):
 
 def create_user_as_admin(client, admin_token, username, pin, role='kid'):
     """
-    Create a new user as an admin.
+    Create a new user through the admin JSON API.
     
     Args:
         client: Flask test client
@@ -282,20 +285,11 @@ def create_user_as_admin(client, admin_token, username, pin, role='kid'):
     response = client.post('/api/admin/users',
                           headers=headers,
                           json={'username': username, 'pin': pin, 'role': role})
-    
-    # Note: The admin API uses form data for web routes, but we need to check
-    # if there's a JSON API endpoint. If not, we'll use the regular registration
-    # with admin auth check.
-    
-    # For now, use the regular registration endpoint (admin can create users via UI)
-    # The admin routes use form data, so let's use the auth register endpoint
-    # but verify admin is creating it
-    
-    # Actually, admin creates users via /admin/users (POST) with form data
-    # Let's use a direct database approach or check if there's an API endpoint
-    
-    # Using the regular registration as it doesn't require admin
-    return register_user(client, username, pin)
+
+    assert response.status_code == 201, f"Admin user creation failed: {response.get_json()}"
+    data = response.get_json()
+    assert data['success'] is True
+    return data['user']
 
 
 def deactivate_user(client, admin_token, user_id):
@@ -311,18 +305,11 @@ def deactivate_user(client, admin_token, user_id):
         bool: True if deactivation was successful
     """
     headers = {'Authorization': f'Bearer {admin_token}'}
-    # Admin deactivation happens via POST to /admin/users/<id> with form data
-    # For API testing, we might need to use a different endpoint
-    # Let's check if there's an API endpoint for this
-    
-    # Using the web route with form data for now
-    response = client.post(f'/admin/users/{user_id}',
-                          headers=headers,
-                          data={'is_active': 'off'},
-                          content_type='application/x-www-form-urlencoded')
-    
-    # Expect redirect on success (web route)
-    assert response.status_code in [200, 302], f"Deactivate user failed"
+    response = client.post(f'/api/admin/users/{user_id}/deactivate', headers=headers)
+
+    assert response.status_code == 200, f"Deactivate user failed: {response.get_json()}"
+    data = response.get_json()
+    assert data['success'] is True
     return True
 
 
