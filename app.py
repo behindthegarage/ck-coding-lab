@@ -172,6 +172,11 @@ def create_app(test_config: dict = None) -> Flask:
     def lab_project(project_id):
         """Individual project workspace."""
         return send_from_directory('templates', 'workspace.html')
+
+    @app.route('/lab/api/<path:api_path>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+    def lab_api_passthrough(api_path):
+        """Local-dev passthrough so /lab deployments can call API endpoints consistently."""
+        return redirect(f'/api/{api_path}', code=307)
     
     # Static files - serve from both /static and /lab/static for flexibility
     @app.route('/static/<path:filename>')

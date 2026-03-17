@@ -312,6 +312,13 @@ class TestHealthAPI:
         assert 'status' in data
         assert data['status'] == 'ok'
 
+    def test_lab_subpath_api_passthrough_redirect(self, client):
+        """Subpath deployments should expose a local-dev passthrough for /lab/api."""
+        response = client.get('/lab/api/auth/health', follow_redirects=False)
+
+        assert response.status_code == 307
+        assert response.headers['Location'].endswith('/api/auth/health')
+
 
 @pytest.mark.integration
 @pytest.mark.api

@@ -2,7 +2,7 @@
 
 // Detect if we're running under /lab subpath
 const isLabSubpath = window.location.pathname.startsWith('/lab');
-const API_BASE = isLabSubpath ? '/api' : '/api';
+const API_BASE = isLabSubpath ? '/lab/api' : '/api';
 const LAB_BASE = isLabSubpath ? '/lab' : '';
 
 // Check if user is logged in
