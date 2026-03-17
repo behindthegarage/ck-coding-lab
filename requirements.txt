@@ -2,6 +2,12 @@
 # Flask web framework
 flask>=2.0.0
 
+# Environment variables
+python-dotenv>=1.0.0
+
+# CORS support for LAN access
+flask-cors>=4.0.0
+
 # Password hashing
 bcrypt>=4.0.0
 

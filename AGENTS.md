@@ -43,18 +43,33 @@ db.commit()
 ## Dev Commands
 
 ```bash
-# Start local dev server
+# Persistent local dev server (recommended)
+make dev
+make status
+make restart
+make stop
+make logs
+
+# Equivalent direct script form
+./scripts/dev-server.sh start
+./scripts/dev-server.sh status
+./scripts/dev-server.sh restart
+./scripts/dev-server.sh stop
+./scripts/dev-server.sh logs
+
+# One-off foreground run (only if you explicitly want terminal-bound Flask)
 flask --app app run --port 5006 --debug
 
-# Or with gunicorn (production-like)
-gunicorn -w 2 -b 127.0.0.1:5006 --timeout 180 "app:create_app()"
-
 # Run tests
+make test
 python3 -m pytest test_auth.py test_sandbox.py -v
 
 # Check health
-curl http://localhost:5006/health
+make health
+curl http://127.0.0.1:5006/api/auth/health
 ```
+
+**Local runner note:** `scripts/dev-server.sh` installs a `systemd --user` service (`ck-coding-lab-local.service`) so the dev server survives shell/session exit instead of dying with the launching terminal. `Makefile` provides the short aliases.
 
 ## Deployment
 

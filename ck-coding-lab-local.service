@@ -1,0 +1,32 @@
+# Club Kinawa Coding Lab - Local Dev User Service
+# Install to: ~/.config/systemd/user/ck-coding-lab-local.service
+# Enable: systemctl --user enable --now ck-coding-lab-local.service
+# Manage: systemctl --user {start|stop|restart|status} ck-coding-lab-local.service
+
+[Unit]
+Description=Club Kinawa Coding Lab (local dev)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/openclaw/ck-coding-lab-local
+EnvironmentFile=-/home/openclaw/ck-coding-lab-local/.env
+Environment="PATH=/home/openclaw/ck-coding-lab-local/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="CKCL_DB_PATH=/home/openclaw/ck-coding-lab-local/ckcl.db"
+Environment="SECRET_KEY=dev-secret-key-change-in-production"
+Environment="PYTHONUNBUFFERED=1"
+ExecStartPre=/bin/mkdir -p /home/openclaw/ck-coding-lab-local/logs
+ExecStart=/home/openclaw/ck-coding-lab-local/venv/bin/gunicorn \
+    --workers 1 \
+    --bind 127.0.0.1:5006 \
+    --timeout 180 \
+    --reload \
+    --access-logfile /home/openclaw/ck-coding-lab-local/logs/access.log \
+    --error-logfile /home/openclaw/ck-coding-lab-local/logs/error.log \
+    --capture-output \
+    "app:create_app()"
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

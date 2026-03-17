@@ -8,6 +8,7 @@ Handles database initialization, blueprint registration, and session cleanup.
 
 import os
 from flask import Flask, g, request, send_from_directory, redirect
+from flask_cors import CORS
 from database import init_db_full
 from auth import cleanup_expired_sessions
 from routes import auth_bp
@@ -37,9 +38,20 @@ def create_app(test_config: dict = None) -> Flask:
     # Create Flask app
     app = Flask(__name__, static_folder='static', template_folder='templates')
     
+    # Enable CORS for LAN access (development only)
+    CORS(app, supports_credentials=True, resources={
+        r"/api/*": {
+            "origins": "*",
+            "supports_credentials": True
+        }
+    })
+    
     # Load configuration
     app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     app.config['DATABASE'] = os.environ.get('CKCL_DB_PATH', 'ckcl.db')
+    app.config['ALLOW_SELF_REGISTRATION'] = os.environ.get(
+        'CKCL_ALLOW_SELF_REGISTRATION', 'false'
+    ).lower() in ('1', 'true', 'yes', 'on')
     
     # Apply test configuration if provided
     if test_config:

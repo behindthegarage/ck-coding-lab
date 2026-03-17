@@ -30,7 +30,7 @@ async function login(username, pin) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ username, pin }),
-                credentials: 'same-origin'
+            credentials: 'include'
         });
 
         const data = await response.json();
@@ -53,7 +53,7 @@ async function logout() {
     if (token) {
         try {
             await fetch(`${API_BASE}/auth/logout`, {
-                credentials: "same-origin",
+                credentials: 'include',
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -87,7 +87,7 @@ async function apiRequest(url, options = {}) {
     }
 
     const response = await fetch(`${API_BASE}${url}`, {
-        credentials: "same-origin",
+        credentials: 'include',
         ...options,
         headers
     });
