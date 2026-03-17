@@ -338,3 +338,61 @@ class TestChatConversationFlow:
         conn.close()
 
         assert 'ellipse' in row['current_code']
+
+    def test_chat_returns_synced_code_after_filename_tagged_multi_file_response(self, client, auth_headers, project_factory, db_path):
+        """Filename-tagged multi-file writes should update current_code and report the entry file."""
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        class FakeAIClient:
+            def generate_code(self, **kwargs):
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO project_files (project_id, filename, content)
+                    VALUES (?, ?, ?)
+                ''', (project_id, 'index.html', '<!DOCTYPE html><html><body><script src="main.js"></script></body></html>'))
+                cursor.execute('''
+                    INSERT INTO project_files (project_id, filename, content)
+                    VALUES (?, ?, ?)
+                ''', (project_id, 'main.js', 'console.log("ready");'))
+                conn.commit()
+                conn.close()
+                return {
+                    'success': True,
+                    'code': '',
+                    'explanation': 'I split the project into index.html and main.js.',
+                    'suggestions': ['Add a score counter'],
+                    'full_response': 'response',
+                    'model': 'kimi-k2.5',
+                    'tokens_used': 55,
+                    'tool_calls': [],
+                    'created_files': [
+                        {'filename': 'index.html', 'action': 'created'},
+                        {'filename': 'main.js', 'action': 'created'}
+                    ],
+                    'primary_file': 'index.html'
+                }
+
+        with patch('chat.routes.get_ai_client', return_value=FakeAIClient()):
+            response = client.post(
+                f'/api/projects/{project_id}/chat',
+                headers=auth_headers,
+                json={'message': 'Make this a multi-file web project', 'enable_tools': True}
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['response']['primary_file'] == 'index.html'
+        assert '<!DOCTYPE html>' in data['response']['code']
+        assert len(data['response']['changed_files']) == 2
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert '<!DOCTYPE html>' in row['current_code']

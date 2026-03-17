@@ -14,6 +14,8 @@ import pytest
 from unittest.mock import patch, MagicMock, mock_open
 import json
 
+from ai.prompts import build_system_prompt
+
 
 @pytest.mark.unit
 class TestAIClientInitialization:
@@ -167,6 +169,28 @@ class TestBuildMessages:
         
         # System prompt should include files
         assert system is not None
+
+
+@pytest.mark.unit
+class TestSystemPromptConstruction:
+    """Tests for prompt contract and project context."""
+
+    def test_system_prompt_includes_multi_file_contract_and_primary_file(self):
+        prompt = build_system_prompt(
+            'Base prompt',
+            'html',
+            project_files={
+                'index.html': '<!DOCTYPE html>',
+                'main.js': 'console.log("ready")'
+            },
+            tools_enabled=True
+        )
+
+        assert 'RESPONSE CONTRACT' in prompt
+        assert 'Current primary / entry file: index.html' in prompt
+        assert 'Tools are available in this turn.' in prompt
+        assert 'index.html' in prompt
+        assert 'main.js' in prompt
 
 
 @pytest.mark.unit

@@ -269,6 +269,30 @@
     font-size: 0.75rem;
 }
 
+.entry-file-card {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 10px;
+}
+
+.entry-file-label {
+    margin: 0 0 0.35rem 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.entry-file-chip {
+    display: inline-block;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--bg-lighter);
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+}
+
 /* Improved chat message styling with tool calls */
 .message-bubble .tool-summary {
     margin-top: 0.75rem;

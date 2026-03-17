@@ -308,6 +308,62 @@ The file wasn't created. Let me write it properly now:
 
 
 @pytest.mark.unit
+class TestMultiFileResponseParsing:
+    """Tests for structured multi-file parsing."""
+
+    def test_prefers_primary_file_code_for_multi_file_html_response(self):
+        """Multi-file HTML responses should surface index.html as the primary code."""
+        content = '''
+I split the project into files so it is easier to grow.
+
+```html index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Space Game</title>
+    <script src="main.js"></script>
+  </head>
+  <body></body>
+</html>
+```
+
+```javascript main.js
+console.log("ready");
+```
+
+## Next ideas
+- Add a score
+- Add sound
+'''
+
+        result = parse_response(content, 'html')
+
+        assert result['primary_file'] == 'index.html'
+        assert '<!DOCTYPE html>' in result['code']
+        assert result['suggestions'] == ['Add a score', 'Add sound']
+
+    def test_primary_file_code_falls_back_to_declared_python_file(self):
+        """When there is no standalone block, declared files still produce primary code."""
+        content = '''
+Made the script a little cleaner.
+
+```python main.py
+print("Hello from main")
+```
+
+```python helpers.py
+def greet(name):
+    return f"Hi {name}!"
+```
+'''
+
+        result = parse_response(content, 'python')
+
+        assert result['primary_file'] == 'main.py'
+        assert 'Hello from main' in result['code']
+
+
+@pytest.mark.unit
 class TestCodeValidationIntegration:
     """Tests for integration between AI parsing and sandbox."""
     

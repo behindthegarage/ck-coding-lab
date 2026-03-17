@@ -174,7 +174,12 @@ class AIClient:
     ):
         """Build the message list for the Kimi API (Anthropic Messages format)."""
         # Get the full system prompt for this language
-        system_content = build_system_prompt(self.base_system_prompt, language, project_files)
+        system_content = build_system_prompt(
+            self.base_system_prompt,
+            language,
+            project_files,
+            tools_enabled=bool(enable_tools and project_id)
+        )
         
         # Map language to code block language identifier
         code_lang = CODE_LANG_MAP.get(language, "")

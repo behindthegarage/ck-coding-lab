@@ -339,21 +339,7 @@ function loadConversations() {
             `;
         } else {
             const parsed = parseAssistantMessage(msg.content);
-            const toolCallsHtml = renderToolCalls(parsed.toolCalls);
-            
-            messageDiv.innerHTML = `
-                <div class="message-bubble">
-                    <div class="explanation">${formatText(parsed.explanation)}</div>
-                    ${toolCallsHtml}
-                    ${parsed.suggestions.length > 0 ? `
-                        <div class="suggestions">
-                            <p><strong>Ideas to try:</strong></p>
-                            <ul>${parsed.suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
-                        </div>
-                    ` : ''}
-                </div>
-                <div class="message-meta">Hari · ${msg.model || 'kimi'} · ${formatTime(msg.created_at)}</div>
-            `;
+            messageDiv.innerHTML = renderAssistantBubble(parsed, msg.model || 'kimi', msg.created_at);
         }
 
         container.appendChild(messageDiv);
@@ -365,27 +351,85 @@ function loadConversations() {
 // Render tool calls in a message
 function renderToolCalls(toolCalls) {
     if (!toolCalls || toolCalls.length === 0) return '';
-    
+
     let html = '<div class="tool-calls-list">';
-    html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Files:</p>';
-    
+    html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Tools used:</p>';
+
     toolCalls.forEach(tc => {
-        const toolName = tc.tool || tc.name;
+        const toolName = tc.tool || tc.name || 'tool';
         const filename = tc.input?.filename || tc.input?.name || '';
         const action = tc.result?.action || 'executed';
         const success = tc.result?.success !== false;
-        
+        const detail = filename ? `${escapeHtml(filename)} → ${escapeHtml(action)}` : escapeHtml(action);
+
         html += `
             <div class="tool-call-item ${success ? 'success' : ''}">
                 <span class="tool-icon">${success ? '✓' : '✗'}</span>
-                <span class="tool-name">${toolName}</span>
-                <span>${filename} → ${action}</span>
+                <span class="tool-name">${escapeHtml(toolName)}</span>
+                <span>${detail}</span>
             </div>
         `;
     });
-    
+
     html += '</div>';
     return html;
+}
+
+function renderChangedFiles(changedFiles) {
+    if (!changedFiles || changedFiles.length === 0) return '';
+
+    let html = '<div class="tool-calls-list">';
+    html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">What changed:</p>';
+
+    changedFiles.forEach(file => {
+        const action = (file.action || 'updated').replace(/_/g, ' ');
+        const actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+        html += `
+            <div class="tool-call-item success">
+                <span class="tool-icon">✓</span>
+                <span>${escapeHtml(actionLabel)}</span>
+                <span class="tool-name">${escapeHtml(file.filename || 'file')}</span>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    return html;
+}
+
+function renderPrimaryFile(primaryFile) {
+    if (!primaryFile) return '';
+
+    return `
+        <div class="entry-file-card">
+            <p class="entry-file-label">Start here:</p>
+            <div class="entry-file-chip">${escapeHtml(primaryFile)}</div>
+        </div>
+    `;
+}
+
+function renderAssistantBubble(data, model, timestamp) {
+    const explanationHtml = data.explanation ? `<div class="explanation">${formatText(data.explanation)}</div>` : '';
+    const changedFilesHtml = renderChangedFiles(data.changedFiles || []);
+    const primaryFileHtml = renderPrimaryFile(data.primaryFile);
+    const toolCallsHtml = renderToolCalls(data.toolCalls || []);
+    const suggestions = data.suggestions || [];
+
+    return `
+        <div class="message-bubble">
+            ${explanationHtml}
+            ${changedFilesHtml}
+            ${primaryFileHtml}
+            ${toolCallsHtml}
+            ${suggestions.length > 0 ? `
+                <div class="suggestions">
+                    <p><strong>Ideas to try:</strong></p>
+                    <ul>${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
+                </div>
+            ` : ''}
+        </div>
+        <div class="message-meta">Hari · ${model || 'kimi'} · ${formatTime(timestamp)}</div>
+    `;
 }
 
 // Send message to AI
@@ -437,14 +481,14 @@ async function sendMessage(message) {
         });
 
         if (data && data.success) {
-            // Refresh file tree if tools were used OR files were created
-            const hasNewFiles = data.response.created_files && data.response.created_files.length > 0;
+            const changedFiles = data.response.changed_files || data.response.created_files || [];
+            const hasFileChanges = changedFiles.length > 0;
             const hasToolCalls = data.response.tool_calls && data.response.tool_calls.length > 0;
-            
-            if (hasNewFiles || hasToolCalls) {
+
+            if (hasFileChanges || hasToolCalls) {
                 await refreshFileTree();
             }
-            
+
             if (data.response.code) {
                 currentCode = data.response.code;
                 updateCodeDisplay();
@@ -457,8 +501,8 @@ async function sendMessage(message) {
                     }
                     runPreview();
                 }
-            } else if (hasNewFiles) {
-                // If files were created, run preview
+            } else if (hasFileChanges) {
+                // If files were created or updated, run preview
                 if (project.language !== 'python') {
                     if (!isMobile && previewCollapsed) {
                         togglePreview();
@@ -469,38 +513,13 @@ async function sendMessage(message) {
 
             const assistantMsg = document.createElement('div');
             assistantMsg.className = 'message assistant';
-            const suggestions = data.response.suggestions || [];
-            const toolCallsHtml = renderToolCalls(data.response.tool_calls);
-            
-            // Show created files in the message
-            let createdFilesHtml = '';
-            if (hasNewFiles) {
-                createdFilesHtml = `
-                    <div class="created-files-list">
-                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Created files:</p>
-                        ${data.response.created_files.map(f => `
-                            <div style="font-size: 0.875rem; color: var(--text-secondary);">
-                                <span style="color: #22c55e;">✓</span> ${escapeHtml(f.filename)}
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
-            
-            assistantMsg.innerHTML = `
-                <div class="message-bubble">
-                    <div class="explanation">${formatText(data.response.explanation)}</div>
-                    ${toolCallsHtml}
-                    ${createdFilesHtml}
-                    ${suggestions.length > 0 ? `
-                        <div class="suggestions">
-                            <p><strong>Ideas to try:</strong></p>
-                            <ul>${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
-                        </div>
-                    ` : ''}
-                </div>
-                <div class="message-meta">Hari · ${data.response.model || 'kimi'} · ${formatTime(new Date().toISOString())}</div>
-            `;
+            assistantMsg.innerHTML = renderAssistantBubble({
+                explanation: data.response.explanation,
+                suggestions: data.response.suggestions || [],
+                toolCalls: data.response.tool_calls || [],
+                changedFiles,
+                primaryFile: data.response.primary_file || ''
+            }, data.response.model || 'kimi', new Date().toISOString());
             container.appendChild(assistantMsg);
             container.scrollTop = container.scrollHeight;
         } else {
@@ -695,11 +714,97 @@ function parseAssistantMessage(content) {
         explanation: '',
         code: '',
         suggestions: [],
-        toolCalls: []
+        toolCalls: [],
+        changedFiles: [],
+        primaryFile: ''
     };
 
-    // Extract tool calls section if present
-    const toolSectionMatch = content.match(/---\s*\n\*\*Tool Calls:\*\*\s*\n([\s\S]*?)$/);
+    if (!content) {
+        return result;
+    }
+
+    const normalized = content.replace(/\r\n/g, '\n').trim();
+    const headingRegex = /^##\s+(.+)$/gm;
+    const matches = [...normalized.matchAll(headingRegex)];
+
+    if (matches.length > 0) {
+        result.explanation = normalized.slice(0, matches[0].index).trim();
+
+        const sections = {};
+        matches.forEach((match, index) => {
+            const sectionName = match[1].trim().toLowerCase();
+            const start = match.index + match[0].length;
+            const end = index + 1 < matches.length ? matches[index + 1].index : normalized.length;
+            sections[sectionName] = normalized.slice(start, end).trim();
+        });
+
+        const parseBullets = (sectionText) => {
+            if (!sectionText) return [];
+            return sectionText
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => /^[-*•]/.test(line))
+                .map(line => line.replace(/^[-*•]\s*/, '').trim())
+                .filter(Boolean);
+        };
+
+        parseBullets(sections['what changed']).forEach(item => {
+            const fileMatch = item.match(/^([A-Za-z ]+?)\s+`([^`]+)`$/);
+            if (fileMatch) {
+                result.changedFiles.push({
+                    action: fileMatch[1].trim().toLowerCase(),
+                    filename: fileMatch[2].trim()
+                });
+            }
+        });
+
+        parseBullets(sections['start here']).forEach(item => {
+            const entryMatch = item.match(/(?:entry file|start with|main file):\s*`?([^`]+)`?/i)
+                || item.match(/`([^`]+)`/);
+            if (!result.primaryFile && entryMatch) {
+                result.primaryFile = (entryMatch[1] || '').trim();
+            }
+        });
+
+        parseBullets(sections['tools used']).forEach(item => {
+            let toolMatch = item.match(/^`([^`]+)` on `([^`]+)`\s*→\s*(.+)$/);
+            if (toolMatch) {
+                result.toolCalls.push({
+                    tool: toolMatch[1],
+                    input: { filename: toolMatch[2] },
+                    result: { action: toolMatch[3] }
+                });
+                return;
+            }
+
+            toolMatch = item.match(/^`([^`]+)` on `([^`]+)`$/);
+            if (toolMatch) {
+                result.toolCalls.push({
+                    tool: toolMatch[1],
+                    input: { filename: toolMatch[2] },
+                    result: { action: 'executed' }
+                });
+                return;
+            }
+
+            const oldStyleMatch = item.match(/^`([^`]+)`:\s*([^→]+)\s*→\s*(.+)$/);
+            if (oldStyleMatch) {
+                result.toolCalls.push({
+                    tool: oldStyleMatch[1],
+                    input: { filename: oldStyleMatch[2].trim() },
+                    result: { action: oldStyleMatch[3].trim() }
+                });
+            }
+        });
+
+        result.suggestions = parseBullets(sections['next ideas'] || sections['next steps'] || sections['suggestions']);
+
+        return result;
+    }
+
+    // Backward-compatible fallback for older stored messages.
+    const toolSectionMatch = normalized.match(/---\s*\n\*\*Tool Calls:\*\*\s*\n([\s\S]*?)$/);
+    let fallbackContent = normalized;
     if (toolSectionMatch) {
         const toolSection = toolSectionMatch[1];
         const toolLines = toolSection.split('\n').filter(l => l.trim().startsWith('-'));
@@ -713,18 +818,17 @@ function parseAssistantMessage(content) {
                 });
             }
         });
-        content = content.substring(0, content.indexOf('---\n\n**Tool Calls:**'));
+        fallbackContent = normalized.substring(0, normalized.indexOf('---\n\n**Tool Calls:**'));
     }
 
-    const codeMatch = content.match(/```(?:javascript|js|html|python|py)?\s*\n([\s\S]*?)\n```/);
+    const codeMatch = fallbackContent.match(/```(?:javascript|js|html|python|py)?\s*\n([\s\S]*?)\n```/);
     if (codeMatch) {
         result.code = codeMatch[1].trim();
     }
 
-    const beforeCode = content.split(/```/)[0].trim();
-    result.explanation = beforeCode;
+    result.explanation = fallbackContent.split(/```/)[0].trim();
 
-    const afterCode = content.split(/```/).slice(-1)[0].trim();
+    const afterCode = fallbackContent.split(/```/).slice(-1)[0].trim();
     if (afterCode) {
         const lines = afterCode.split('\n').filter(l => l.trim().startsWith('-') || l.trim().startsWith('•'));
         result.suggestions = lines.map(l => l.replace(/^[-•]\s*/, '').trim()).filter(l => l);

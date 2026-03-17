@@ -7,93 +7,171 @@ import re
 from typing import Dict, List, Optional
 
 from ai.tools import FileTools
+from projects.state import choose_primary_code_file
+
+FILE_START_PATTERN = re.compile(
+    r'```([A-Za-z0-9_+#.-]+)\s+\[?([^\]\n]+)\]?\s*\n',
+    re.DOTALL
+)
+FILE_PREFIX_PATTERN = re.compile(
+    r'(?:File|file):\s*([\w.\-/]+)\s*\n```([A-Za-z0-9_+#.-]+)?\s*\n(.*?)```',
+    re.DOTALL
+)
+TOOL_SUMMARY_MARKER = '\n---\n\n**Tool Calls:**'
+SECTION_HEADING_PATTERN = re.compile(r'(?im)^##+\s+')
+SUGGESTION_PATTERNS = [
+    r'(?:^|\n)(?:##+\s*)?(?:Next ideas|Next steps|Suggestions|Ideas to try|What you could add|Try adding)[\s:]*\n((?:[-*•\d.]\s*.*?(?:\n|$))+)',
+    r'(?:\*\*)?(?:What you could add|Suggestions)[\s:]*(?:\*\*)?\n((?:[-*•\d.]\s*.*?(?:\n|$))+)',
+    r'\n((?:[-*•]\s*.*?\n)+)',
+]
 
 
-def parse_response(
-    content: str,
-    language: str = "undecided",
-    project_id: Optional[int] = None
-) -> Dict:
-    """
-    Parse AI response to extract code, explanation, suggestions, and file declarations.
-    
-    Args:
-        content: The raw AI response text
-        language: 'p5js', 'html', 'python', or 'undecided' - affects which code blocks to look for
-        project_id: Project ID for saving extracted files
-        
-    Returns:
-        Dict with code, explanation, suggestions, created_files
-    """
-    result = {
-        "code": "",
-        "explanation": "",
-        "suggestions": [],
-        "created_files": []
-    }
-    
-    print(f"_parse_response: content length {len(content)}, project_id={project_id}")
-    
-    # STEP 1: Extract file declarations from code blocks
-    # Pattern: ```language filename or ```language [filename]
-    # Examples: ```html index.html, ```css style.css, ```js main.js
-    #
-    # Important: some model responses get clipped before the closing ``` fence.
-    # When that happens we still want to recover and save the file content
-    # instead of silently dropping it.
-    file_start_pattern = re.compile(
-        r'```(html|css|js|javascript|python|py)\s+\[?([^\]\n]+)\]?\s*\n',
-        re.DOTALL
-    )
-    file_starts = list(file_start_pattern.finditer(content))
-    
-    # Also look for "File: filename" pattern before code blocks
-    file_prefix_pattern = r'(?:File|file):\s*([\w.\-/]+)\s*\n```(html|css|js|javascript|python|py)?\s*\n(.*?)```'
-    prefix_matches = re.findall(file_prefix_pattern, content, re.DOTALL)
-    
-    all_files = []
-    
-    # Process filename-in-codeblock pattern, tolerating missing closing fences
+def _strip_tool_summary(text: str) -> str:
+    if TOOL_SUMMARY_MARKER in text:
+        return text.split(TOOL_SUMMARY_MARKER, 1)[0]
+    return text
+
+
+def _extract_declared_files(content: str) -> List[Dict[str, str]]:
+    """Extract filename-tagged code blocks, tolerating clipped responses."""
+    all_files: List[Dict[str, str]] = []
+    cleaned_content = _strip_tool_summary(content)
+    file_starts = list(FILE_START_PATTERN.finditer(cleaned_content))
+
     for i, match in enumerate(file_starts):
         lang = match.group(1)
-        filename = match.group(2).strip()
+        filename = match.group(2).strip().strip('`')
         content_start = match.end()
-        next_start = file_starts[i + 1].start() if i + 1 < len(file_starts) else len(content)
-        segment = content[content_start:next_start]
-        
+        next_start = file_starts[i + 1].start() if i + 1 < len(file_starts) else len(cleaned_content)
+        segment = cleaned_content[content_start:next_start]
+
         closing_match = re.search(r'\n```\s*(?:\n|$)', segment)
-        if closing_match:
-            file_content = segment[:closing_match.start()]
-        else:
-            tool_summary_idx = segment.find('\n---\n\n**Tool Calls:**')
-            if tool_summary_idx != -1:
-                file_content = segment[:tool_summary_idx]
-            else:
-                file_content = segment
-        
+        file_content = segment[:closing_match.start()] if closing_match else segment
+
         if filename and file_content.strip():
             all_files.append({
                 'filename': filename,
                 'content': file_content.strip(),
-                'language': lang
+                'language': lang,
             })
-    
-    # Process "File: filename" pattern
-    for filename, lang, file_content in prefix_matches:
-        filename = filename.strip()
-        if filename and file_content:
+
+    for filename, lang, file_content in FILE_PREFIX_PATTERN.findall(cleaned_content):
+        filename = filename.strip().strip('`')
+        if filename and file_content.strip():
             all_files.append({
                 'filename': filename,
                 'content': file_content.strip(),
-                'language': lang or 'text'
+                'language': lang or 'text',
             })
-    
-    print(f"_parse_response: found {len(all_files)} file declarations")
-    
-    # Save files to database if project_id is provided
-    if project_id and all_files:
+
+    deduped: Dict[str, Dict[str, str]] = {}
+    for file_info in all_files:
+        deduped[file_info['filename']] = file_info
+
+    return list(deduped.values())
+
+
+def _extract_primary_code(content: str, language: str, declared_files: List[Dict[str, str]]) -> str:
+    """Extract the primary code block for compatibility with single-file flows."""
+    lang_identifiers = {
+        'p5js': ['javascript', 'js', ''],
+        'html': ['html', ''],
+        'python': ['python', 'py', ''],
+        'undecided': ['javascript', 'js', 'html', 'python', 'py', ''],
+    }
+    identifiers = lang_identifiers.get(language, [''])
+
+    code_matches = []
+    for ident in identifiers:
+        if ident:
+            pattern = rf'```{ident}\s*\n(?!.*index\.html|.*style\.css|.*main\.js|.*dice\.js)(.*?)\n```'
+        else:
+            pattern = r'```\s*\n(.*?)(?:\n)?```'
+        matches = [match.strip() for match in re.findall(pattern, content, re.DOTALL) if match and match.strip()]
+        if matches:
+            code_matches = matches
+            break
+
+    if code_matches:
+        return code_matches[0]
+
+    if declared_files:
+        file_map = {file_info['filename']: file_info['content'] for file_info in declared_files}
+        primary_file = choose_primary_code_file(language, file_map)
+        if primary_file and primary_file in file_map:
+            return file_map[primary_file].strip()
+        first_file = declared_files[0]
+        return first_file['content'].strip()
+
+    return ''
+
+
+def _extract_explanation(content: str) -> str:
+    """Get explanation text before the first code block or section heading."""
+    cleaned_content = _strip_tool_summary(content)
+    code_match = re.search(r'```', cleaned_content)
+    heading_match = SECTION_HEADING_PATTERN.search(cleaned_content)
+
+    cut_points = [match.start() for match in [code_match, heading_match] if match]
+    if cut_points:
+        return cleaned_content[:min(cut_points)].strip()
+    return cleaned_content.strip()
+
+
+def _extract_suggestions(content: str) -> List[str]:
+    """Extract suggestion bullet lists from the tail of the response."""
+    cleaned_content = _strip_tool_summary(content)
+    last_fence_idx = cleaned_content.rfind('```')
+    tail = cleaned_content[last_fence_idx + 3:] if last_fence_idx != -1 else cleaned_content
+
+    for pattern in SUGGESTION_PATTERNS:
+        match = re.search(pattern, tail, re.IGNORECASE | re.DOTALL)
+        if not match:
+            continue
+        suggestions_text = match.group(1)
+        suggestions = re.findall(r'[-*•\d.]\s*(.*?)(?=\n[-*•\d.]|\Z)', suggestions_text, re.DOTALL)
+        cleaned = [s.strip() for s in suggestions if s.strip()]
+        if cleaned:
+            return cleaned
+
+    return []
+
+
+def parse_response(
+    content: str,
+    language: str = 'undecided',
+    project_id: Optional[int] = None
+) -> Dict:
+    """
+    Parse AI response to extract code, explanation, suggestions, and file declarations.
+
+    Args:
+        content: The raw AI response text
+        language: 'p5js', 'html', 'python', or 'undecided' - affects which code blocks to look for
+        project_id: Project ID for saving extracted files
+
+    Returns:
+        Dict with code, explanation, suggestions, created_files, primary_file
+    """
+    result = {
+        'code': '',
+        'explanation': '',
+        'suggestions': [],
+        'created_files': [],
+        'primary_file': None,
+    }
+
+    print(f"_parse_response: content length {len(content)}, project_id={project_id}")
+
+    declared_files = _extract_declared_files(content)
+    file_map = {file_info['filename']: file_info['content'] for file_info in declared_files}
+    result['primary_file'] = choose_primary_code_file(language, file_map) if file_map else None
+
+    print(f"_parse_response: found {len(declared_files)} file declarations")
+
+    if project_id and declared_files:
         file_tools = FileTools(project_id)
-        for file_info in all_files:
+        for file_info in declared_files:
             try:
                 tool_result = file_tools.write_file(file_info['filename'], file_info['content'])
                 if tool_result.get('success'):
@@ -104,63 +182,13 @@ def parse_response(
                     print(f"_parse_response: saved file {file_info['filename']}")
             except Exception as e:
                 print(f"_parse_response: error saving file {file_info['filename']}: {e}")
-    
-    # STEP 2: Extract main code block for backward compatibility
-    # Map language to possible code block identifiers
-    lang_identifiers = {
-        "p5js": ["javascript", "js", ""],
-        "html": ["html", ""],
-        "python": ["python", "py", ""],
-        "undecided": ["javascript", "js", "html", "python", "py", ""]
-    }
-    identifiers = lang_identifiers.get(language, [""])
-    
-    # Build regex patterns for each identifier (without filename)
-    code_patterns = []
-    for ident in identifiers:
-        if ident:
-            # Pattern without filename - just language tag
-            code_patterns.append(rf'```{ident}\s*\n(?!.*index\.html|.*style\.css|.*main\.js|.*dice\.js)(.*?)\n```')
-        else:
-            code_patterns.append(r'```\s*\n(.*?)(?:\n)?```')
-    
-    code_matches = []
-    for pattern in code_patterns:
-        matches = re.findall(pattern, content, re.DOTALL)
-        if matches:
-            code_matches = matches
-            break
-    
-    print(f"_parse_response: found {len(code_matches)} code blocks for main code")
-    
-    if code_matches:
-        result["code"] = code_matches[0].strip()
-        print(f"_parse_response: extracted code length {len(result['code'])}")
-    
-    # STEP 3: Get explanation - text before first code block
-    parts = re.split(r'```(?:\w+)?(?:\s*\[?[^\]]*\]?)?\s*\n?', content, maxsplit=1, flags=re.DOTALL)
-    if parts:
-        result["explanation"] = parts[0].strip()
-        print(f"_parse_response: explanation length {len(result['explanation'])}")
-    
-    # STEP 4: Extract suggestions from text after code blocks
-    if len(parts) > 1:
-        after_code_parts = content.split('```')
-        if len(after_code_parts) >= 3:
-            after_code = ''.join(after_code_parts[2:])
-            
-            # Look for suggestions - various patterns
-            suggestion_patterns = [
-                r'(?:What you could add|Suggestions|Next steps|Try adding|Ideas to try)[\s:]*\n((?:[-*•\d.]\s*.*?\n?)+)',
-                r'(?:\*\*)?(?:What you could add|Suggestions)[\s:]*(?:\*\*)?\n((?:[-*•\d.]\s*.*?\n?)+)',
-                r'\n((?:[-*•]\s*.*?\n)+)',  # Any bullet list
-            ]
-            for pattern in suggestion_patterns:
-                match = re.search(pattern, after_code, re.IGNORECASE | re.DOTALL)
-                if match:
-                    suggestions_text = match.group(1)
-                    suggestions = re.findall(r'[-*•\d.]\s*(.*?)(?=\n[-*•\d.]|\Z)', suggestions_text, re.DOTALL)
-                    result["suggestions"] = [s.strip() for s in suggestions if s.strip()]
-                    break
-    
+
+    result['code'] = _extract_primary_code(content, language, declared_files)
+    print(f"_parse_response: extracted code length {len(result['code'])}")
+
+    result['explanation'] = _extract_explanation(content)
+    print(f"_parse_response: explanation length {len(result['explanation'])}")
+
+    result['suggestions'] = _extract_suggestions(content)
+
     return result
