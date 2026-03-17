@@ -90,6 +90,22 @@ def init_db(db_path: str = None) -> None:
     cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_rate_limit_user_window ON rate_limit_buckets (user_id, window_start)
     ''')
+
+    # Create login rate limiting table
+    # Stores failed login attempts per client IP for multi-process safety
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS login_rate_limit_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_ip TEXT NOT NULL,
+            attempted_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Create index on login rate limit lookups
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_login_rate_limit_ip_time ON login_rate_limit_attempts (client_ip, attempted_at)
+    ''')
     
     conn.commit()
     conn.close()

@@ -14,22 +14,22 @@ All endpoints return JSON with consistent structure:
 """
 
 import re
-from functools import wraps
+import sqlite3
 from flask import Blueprint, request, jsonify, g, current_app
-from datetime import datetime
+from datetime import datetime, timedelta
 from auth import (
     create_user, authenticate, create_session, validate_session, invalidate_session,
     cleanup_expired_sessions, require_auth, AuthError, InvalidPINError, UserExistsError
 )
+from database import get_database_path
 
 # Create Flask Blueprint
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
-# Rate limiting storage (in-memory, per-process)
-# For production with multiple workers, use Redis or similar
-_rate_limit_store = {}
+# Rate limiting configuration
 RATE_LIMIT_ATTEMPTS = 5  # Max attempts
 RATE_LIMIT_WINDOW_SECONDS = 60  # Time window in seconds
+LOGIN_RATE_LIMIT_ERROR = 'Too many login attempts. Please wait a minute and try again.'
 
 
 def get_client_ip() -> str:
@@ -44,40 +44,90 @@ def get_client_ip() -> str:
     return request.remote_addr or 'unknown'
 
 
+def _login_rate_limit_connection() -> sqlite3.Connection:
+    """Open a dedicated connection for login rate limit checks."""
+    conn = sqlite3.connect(get_database_path())
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def _current_login_attempt_count(cursor: sqlite3.Cursor, ip: str, now: datetime) -> int:
+    """Prune expired attempts and return the current count for an IP."""
+    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW_SECONDS)
+    timestamp = window_start.strftime('%Y-%m-%dT%H:%M:%S')
+
+    cursor.execute(
+        '''
+        DELETE FROM login_rate_limit_attempts
+        WHERE client_ip = ? AND attempted_at < datetime(?)
+        ''',
+        (ip, timestamp),
+    )
+    cursor.execute(
+        '''
+        SELECT COUNT(*) AS count FROM login_rate_limit_attempts
+        WHERE client_ip = ? AND attempted_at >= datetime(?)
+        ''',
+        (ip, timestamp),
+    )
+    result = cursor.fetchone()
+    return result['count'] if result else 0
+
+
 def check_rate_limit(ip: str) -> bool:
     """
     Check if IP has exceeded rate limit for login attempts.
-    
-    Args:
-        ip: Client IP address
-    
-    Returns:
-        bool: True if rate limited (too many attempts), False otherwise
+
+    Uses database-backed storage so the limit is shared across workers.
     """
     now = datetime.utcnow()
-    
-    if ip not in _rate_limit_store:
-        _rate_limit_store[ip] = []
-    
-    # Clean old entries outside the window
-    _rate_limit_store[ip] = [
-        timestamp for timestamp in _rate_limit_store[ip]
-        if (now - timestamp).total_seconds() < RATE_LIMIT_WINDOW_SECONDS
-    ]
-    
-    # Check if limit exceeded
-    if len(_rate_limit_store[ip]) >= RATE_LIMIT_ATTEMPTS:
-        return True
-    
-    return False
+    conn = _login_rate_limit_connection()
+
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        cursor = conn.cursor()
+        current_count = _current_login_attempt_count(cursor, ip, now)
+        conn.commit()
+        return current_count >= RATE_LIMIT_ATTEMPTS
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
-def record_attempt(ip: str) -> None:
-    """Record a login attempt for rate limiting."""
+def record_attempt(ip: str) -> bool:
+    """Record a failed login attempt for an IP.
+
+    Returns:
+        bool: True if the failure was recorded, False if the IP was already rate limited.
+    """
     now = datetime.utcnow()
-    if ip not in _rate_limit_store:
-        _rate_limit_store[ip] = []
-    _rate_limit_store[ip].append(now)
+    conn = _login_rate_limit_connection()
+
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        cursor = conn.cursor()
+        current_count = _current_login_attempt_count(cursor, ip, now)
+        if current_count >= RATE_LIMIT_ATTEMPTS:
+            conn.commit()
+            return False
+
+        cursor.execute(
+            '''
+            INSERT INTO login_rate_limit_attempts (client_ip, attempted_at)
+            VALUES (?, datetime(?))
+            ''',
+            (ip, now.strftime('%Y-%m-%dT%H:%M:%S')),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def require_admin_for_registration():
@@ -161,7 +211,7 @@ def login():
     if check_rate_limit(client_ip):
         return jsonify({
             'success': False,
-            'error': 'Too many login attempts. Please wait a minute and try again.'
+            'error': LOGIN_RATE_LIMIT_ERROR
         }), 429
     
     # Validate request body
@@ -183,7 +233,11 @@ def login():
     
     # Validate PIN format
     if not re.match(r'^\d{4}$', pin):
-        record_attempt(client_ip)
+        if not record_attempt(client_ip):
+            return jsonify({
+                'success': False,
+                'error': LOGIN_RATE_LIMIT_ERROR
+            }), 429
         return jsonify({
             'success': False,
             'error': 'PIN must be exactly 4 digits'
@@ -193,7 +247,11 @@ def login():
     user = authenticate(username, pin)
     
     if not user:
-        record_attempt(client_ip)
+        if not record_attempt(client_ip):
+            return jsonify({
+                'success': False,
+                'error': LOGIN_RATE_LIMIT_ERROR
+            }), 429
         return jsonify({
             'success': False,
             'error': 'Invalid username or PIN'

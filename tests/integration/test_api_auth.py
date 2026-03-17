@@ -11,17 +11,41 @@ Tests cover:
 - Error responses
 """
 
+import os
 import pytest
-import json
+import subprocess
+import sys
 
 
 @pytest.fixture(autouse=True)
-def reset_auth_rate_limit():
-    """Reset the auth rate limit store before each test."""
-    import routes
-    routes._rate_limit_store.clear()
-    yield
-    routes._rate_limit_store.clear()
+def reset_auth_rate_limit(db_path):
+    """Reset persisted auth rate limit attempts before each test."""
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute('DELETE FROM login_rate_limit_attempts')
+        conn.commit()
+        yield
+        conn.execute('DELETE FROM login_rate_limit_attempts')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def seed_login_failures_in_subprocess(db_path: str, ip: str, attempts: int) -> None:
+    """Seed failed login attempts from a separate Python process."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    env = os.environ.copy()
+    env['CKCL_DB_PATH'] = db_path
+
+    script = f"""
+from routes import record_attempt
+for _ in range({attempts}):
+    if not record_attempt({ip!r}):
+        raise SystemExit(1)
+"""
+    subprocess.run([sys.executable, '-c', script], cwd=repo_root, env=env, check=True)
 
 
 @pytest.mark.integration
@@ -192,6 +216,24 @@ class TestLoginAPI:
                                   json={'username': 'testuser', 'pin': '9999'})
         
         # 6th attempt should be rate limited
+        assert response.status_code == 429
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'too many' in data['error'].lower()
+
+    def test_login_rate_limiting_is_shared_across_processes(self, client, test_user, db_path):
+        """Failed login attempts recorded in another process should block this worker too."""
+        from routes import RATE_LIMIT_ATTEMPTS
+
+        ip = '203.0.113.77'
+        seed_login_failures_in_subprocess(db_path, ip, RATE_LIMIT_ATTEMPTS)
+
+        response = client.post(
+            '/api/auth/login',
+            headers={'X-Forwarded-For': ip},
+            json={'username': test_user['username'], 'pin': '1234'},
+        )
+
         assert response.status_code == 429
         data = response.get_json()
         assert data['success'] is False
