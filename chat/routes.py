@@ -13,6 +13,7 @@ from auth import require_auth
 from ai import get_ai_client
 from chat import chat_bp
 from chat.rate_limit import check_chat_rate_limit
+from projects.state import is_code_file, persist_generated_code, sync_current_code_cache
 
 
 @chat_bp.route('/projects/<int:project_id>/chat', methods=['POST'])
@@ -45,7 +46,7 @@ def chat_with_ai(project_id):
         return jsonify({"success": False, "error": "Message too long (max 2000 chars)"}), 400
     
     with get_db() as db:
-        # Verify ownership and get current code AND language
+        # Verify ownership and derive current code from authoritative project files
         db.execute('''
             SELECT id, current_code, language FROM projects WHERE id = ? AND user_id = ?
         ''', (project_id, user_id))
@@ -54,8 +55,15 @@ def chat_with_ai(project_id):
         if not result:
             return jsonify({"success": False, "error": "Project not found"}), 404
         
-        current_code = result['current_code'] or ''
         language = result['language'] or 'undecided'
+        project_state = sync_current_code_cache(
+            db,
+            project_id,
+            language,
+            fallback_current_code=result['current_code'] or '',
+            touch_project=False
+        )
+        current_code = project_state['current_code']
         
         # Get conversation history for context
         db.execute('''
@@ -103,7 +111,7 @@ def chat_with_ai(project_id):
             tool_summary += f"- `{tc['tool']}`: {tc['input'].get('filename', '')} → {tc['result'].get('action', 'executed')}\n"
         ai_content += tool_summary
     
-    # Save AI response
+    # Save AI response and keep projects.current_code derived from project_files
     with get_db() as db:
         db.execute('''
             INSERT INTO conversations (project_id, role, content, model, tokens_used)
@@ -115,20 +123,36 @@ def chat_with_ai(project_id):
             model,
             result['tokens_used']
         ))
-        
-        # Update project code if code was generated
-        if result['code']:
-            db.execute('''
-                UPDATE projects
-                SET current_code = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (result['code'], project_id))
+
+        tool_calls = result.get('tool_calls', []) or []
+        code_files_touched = any(
+            is_code_file((tc.get('input') or {}).get('filename', ''))
+            for tc in tool_calls
+        )
+
+        # For simple single-file responses without tool-based writes, persist the
+        # generated code into project_files so files remain the source of truth.
+        if result['code'] and not tool_calls:
+            persist_generated_code(db, project_id, language, result['code'])
+            code_files_touched = True
+
+        project_state = sync_current_code_cache(
+            db,
+            project_id,
+            language,
+            fallback_current_code=current_code,
+            touch_project=bool(result['code'] or tool_calls)
+        )
+
+    response_code = result['code']
+    if result['code'] or code_files_touched:
+        response_code = project_state['current_code']
     
     return jsonify({
         "success": True,
         "response": {
             "explanation": result['explanation'],
-            "code": result['code'],
+            "code": response_code,
             "suggestions": result['suggestions'],
             "model": result['model'],
             "tokens_used": result['tokens_used'],

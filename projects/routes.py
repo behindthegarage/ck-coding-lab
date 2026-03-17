@@ -12,6 +12,7 @@ from database import get_db, row_to_dict
 from auth import require_auth
 from projects import project_bp
 from projects.utils import create_default_files
+from projects.state import sync_current_code_cache
 from sandbox import CodeValidator
 
 
@@ -85,6 +86,15 @@ def get_project(project_id):
         
         if not project:
             return jsonify({"success": False, "error": "Project not found"}), 404
+
+        project_state = sync_current_code_cache(
+            db,
+            project_id,
+            project.get('language') or 'undecided',
+            fallback_current_code=project.get('current_code', '') or '',
+            touch_project=False
+        )
+        project['current_code'] = project_state['current_code']
         
         # Get conversation history
         db.execute('''

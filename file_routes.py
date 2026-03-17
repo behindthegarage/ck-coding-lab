@@ -13,6 +13,7 @@ from datetime import datetime
 
 from database import get_db, row_to_dict
 from auth import validate_session
+from projects.state import is_code_file, sync_current_code_cache
 
 
 # Create blueprint
@@ -112,6 +113,16 @@ def create_project_file(project_id):
             ''', (project_id, filename, content))
             
             file_id = db.lastrowid
+
+            db.execute('SELECT language, current_code FROM projects WHERE id = ?', (project_id,))
+            project = db.fetchone()
+            sync_current_code_cache(
+                db,
+                project_id,
+                project['language'] if project else 'undecided',
+                fallback_current_code=(project['current_code'] if project else '') or '',
+                touch_project=True
+            )
             
             # Fetch the created file
             db.execute('SELECT * FROM project_files WHERE id = ?', (file_id,))
@@ -169,7 +180,8 @@ def update_file(file_id):
     with get_db() as db:
         # Verify ownership through project
         db.execute('''
-            SELECT pf.id, p.user_id as project_owner_id
+            SELECT pf.id, pf.project_id, p.user_id as project_owner_id,
+                   p.language, p.current_code
             FROM project_files pf
             JOIN projects p ON pf.project_id = p.id
             WHERE pf.id = ?
@@ -188,6 +200,14 @@ def update_file(file_id):
             SET content = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ''', (content, file_id))
+
+        sync_current_code_cache(
+            db,
+            row['project_id'],
+            row['language'] or 'undecided',
+            fallback_current_code=row['current_code'] or '',
+            touch_project=True
+        )
         
         # Fetch updated file
         db.execute('SELECT * FROM project_files WHERE id = ?', (file_id,))
@@ -205,7 +225,8 @@ def delete_file(file_id):
     with get_db() as db:
         # Verify ownership through project
         db.execute('''
-            SELECT pf.id, p.user_id as project_owner_id
+            SELECT pf.id, pf.project_id, pf.filename, p.user_id as project_owner_id,
+                   p.language, p.current_code
             FROM project_files pf
             JOIN projects p ON pf.project_id = p.id
             WHERE pf.id = ?
@@ -220,6 +241,14 @@ def delete_file(file_id):
         
         # Delete file
         db.execute('DELETE FROM project_files WHERE id = ?', (file_id,))
+
+        sync_current_code_cache(
+            db,
+            row['project_id'],
+            row['language'] or 'undecided',
+            fallback_current_code='' if is_code_file(row['filename']) else (row['current_code'] or ''),
+            touch_project=True
+        )
     
     return jsonify({"success": True})
 
@@ -264,6 +293,9 @@ def update_file_by_name(project_id, filename):
         return jsonify({"success": False, "error": "Project not found"}), 404
     
     with get_db() as db:
+        db.execute('SELECT language, current_code FROM projects WHERE id = ?', (project_id,))
+        project = db.fetchone()
+
         # Check if file exists
         db.execute('''
             SELECT id FROM project_files
@@ -287,6 +319,14 @@ def update_file_by_name(project_id, filename):
                 VALUES (?, ?, ?)
             ''', (project_id, filename, content))
             file_id = db.lastrowid
+
+        sync_current_code_cache(
+            db,
+            project_id,
+            project['language'] if project else 'undecided',
+            fallback_current_code=(project['current_code'] if project else '') or '',
+            touch_project=True
+        )
         
         # Fetch the file
         db.execute('SELECT * FROM project_files WHERE id = ?', (file_id,))

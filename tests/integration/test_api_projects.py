@@ -184,6 +184,30 @@ class TestGetProjectAPI:
         
         assert response.status_code == 404  # Should not reveal existence
 
+    def test_get_project_uses_authoritative_project_files_for_current_code(self, client, auth_headers, project_factory, db_path):
+        """Project loads should heal stale current_code from project_files."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', ('stale code', project_id))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'index.html', '<html><body>Fresh</body></html>'))
+        conn.commit()
+        conn.close()
+
+        response = client.get(f'/api/projects/{project_id}', headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['project']['current_code'] == '<html><body>Fresh</body></html>'
+
 
 @pytest.mark.integration
 @pytest.mark.api
@@ -395,3 +419,38 @@ class TestProjectFilesAPI:
         assert 'architecture.md' in filenames
         assert 'todo.md' in filenames
         assert 'notes.md' in filenames
+
+    def test_updating_primary_code_file_syncs_project_current_code(self, client, auth_headers, project_factory, db_path):
+        """File edits should keep projects.current_code aligned with the primary file."""
+        import sqlite3
+
+        project = project_factory(language='p5js')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', ('old code', project_id))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'sketch.js', 'function setup() {}'))
+        conn.commit()
+        conn.close()
+
+        response = client.put(
+            f'/api/projects/{project_id}/files/sketch.js',
+            headers=auth_headers,
+            json={'content': 'function draw() { ellipse(10, 10, 10, 10); }'}
+        )
+
+        assert response.status_code == 200
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert 'ellipse' in row['current_code']

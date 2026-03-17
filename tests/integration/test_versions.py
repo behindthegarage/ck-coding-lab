@@ -176,6 +176,51 @@ class TestSaveVersionAPI:
         
         assert result['code'] == code
 
+    def test_save_version_prefers_project_files_snapshot_for_multifile_projects(self, client, auth_headers, project_factory, db_path):
+        """Multi-file saves should snapshot project_files even if current_code is stale."""
+        import sqlite3
+        import json
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', ('stale code', project_id))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'index.html', '<html><body>Hello</body></html>'))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'main.js', 'console.log("hello")'))
+        conn.commit()
+
+        response = client.post(
+            f'/api/projects/{project_id}/versions',
+            headers=auth_headers,
+            json={'description': 'Multifile snapshot'}
+        )
+
+        assert response.status_code == 200
+        version_id = response.get_json()['version_id']
+
+        cursor.execute('''
+            SELECT code, files_snapshot, entry_filename
+            FROM code_versions
+            WHERE id = ?
+        ''', (version_id,))
+        result = cursor.fetchone()
+        conn.close()
+
+        files_snapshot = json.loads(result['files_snapshot'])
+        assert result['code'] == '<html><body>Hello</body></html>'
+        assert result['entry_filename'] == 'index.html'
+        assert files_snapshot['index.html'] == '<html><body>Hello</body></html>'
+        assert files_snapshot['main.js'] == 'console.log("hello")'
+
 
 @pytest.mark.integration
 @pytest.mark.api
@@ -305,6 +350,43 @@ class TestGetVersionAPI:
         assert data['success'] is True
         assert data['version']['code'] == 'saved code here'
         assert data['version']['description'] == 'Saved version'
+        assert data['version']['files'] == {'sketch.js': 'saved code here'}
+        assert data['version']['entry_filename'] == 'sketch.js'
+
+    def test_get_version_returns_stored_file_snapshot(self, client, auth_headers, project_factory, db_path):
+        """Version retrieval should include the saved multi-file snapshot."""
+        import sqlite3
+        import json
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            project_id,
+            '<html></html>',
+            'Saved html version',
+            json.dumps({'index.html': '<html></html>', 'main.js': 'console.log(1)'}),
+            'index.html'
+        ))
+        version_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.get(
+            f'/api/projects/{project_id}/versions/{version_id}',
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        version = response.get_json()['version']
+        assert version['entry_filename'] == 'index.html'
+        assert version['files']['index.html'] == '<html></html>'
+        assert version['files']['main.js'] == 'console.log(1)'
     
     def test_get_version_not_found(self, client, auth_headers, project_factory):
         """Test retrieving non-existent version."""

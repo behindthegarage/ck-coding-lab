@@ -213,6 +213,8 @@ def migrate_v2_projects_and_conversations(db_path: str = None) -> None:
             project_id INTEGER NOT NULL,
             code TEXT NOT NULL,
             description TEXT,
+            files_snapshot TEXT,
+            entry_filename TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )
@@ -336,6 +338,40 @@ def migrate_v5_project_files(db_path: str = None) -> None:
     print("Migration v5: project_files table created successfully.")
 
 
+def migrate_v6_code_version_snapshots(db_path: str = None) -> None:
+    """
+    Migration: Add multi-file version snapshot columns to code_versions.
+
+    Adds:
+    - files_snapshot: JSON snapshot of project_files at save time
+    - entry_filename: primary file mirrored into the legacy code field
+    """
+    if db_path is None:
+        db_path = get_database_path()
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("PRAGMA table_info(code_versions)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    if 'files_snapshot' not in columns:
+        cursor.execute('''
+            ALTER TABLE code_versions
+            ADD COLUMN files_snapshot TEXT
+        ''')
+
+    if 'entry_filename' not in columns:
+        cursor.execute('''
+            ALTER TABLE code_versions
+            ADD COLUMN entry_filename TEXT
+        ''')
+
+    conn.commit()
+    conn.close()
+
+
+
 def init_db_full(db_path: str = None) -> None:
     """
     Initialize complete database including all migrations.
@@ -348,3 +384,4 @@ def init_db_full(db_path: str = None) -> None:
     migrate_v3_add_language(db_path)
     migrate_v4_admin_columns(db_path)
     migrate_v5_project_files(db_path)
+    migrate_v6_code_version_snapshots(db_path)

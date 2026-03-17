@@ -11,6 +11,7 @@ Tests cover:
 
 import pytest
 import json
+import sqlite3
 from unittest.mock import patch, MagicMock
 
 
@@ -283,3 +284,57 @@ class TestChatConversationFlow:
         data = response.get_json()
         assert 'tool_calls' in data['response']
         assert len(data['response']['tool_calls']) == 1
+
+    def test_chat_returns_synced_code_after_tool_written_primary_file(self, client, auth_headers, project_factory, db_path):
+        """Tool-based code writes should refresh current_code from project_files."""
+
+        project = project_factory(language='p5js')
+        project_id = project['id']
+
+        class FakeAIClient:
+            def generate_code(self, **kwargs):
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO project_files (project_id, filename, content)
+                    VALUES (?, ?, ?)
+                ''', (project_id, 'sketch.js', 'function draw() { ellipse(20, 20, 20, 20); }'))
+                conn.commit()
+                conn.close()
+                return {
+                    'success': True,
+                    'code': '',
+                    'explanation': 'Wrote sketch.js',
+                    'suggestions': [],
+                    'full_response': 'response',
+                    'model': 'kimi-k2.5',
+                    'tokens_used': 42,
+                    'tool_calls': [
+                        {
+                            'tool': 'write_file',
+                            'input': {'filename': 'sketch.js'},
+                            'result': {'success': True, 'action': 'created'}
+                        }
+                    ],
+                    'created_files': [{'filename': 'sketch.js', 'action': 'created'}]
+                }
+
+        with patch('chat.routes.get_ai_client', return_value=FakeAIClient()):
+            response = client.post(
+                f'/api/projects/{project_id}/chat',
+                headers=auth_headers,
+                json={'message': 'Create a sketch with tools', 'enable_tools': True}
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'ellipse' in data['response']['code']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert 'ellipse' in row['current_code']
