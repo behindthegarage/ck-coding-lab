@@ -135,8 +135,14 @@
                 placeholder="File contents will appear here..."
             ></textarea>
             <div class="modal-actions file-modal-actions">
-                <button id="file-modal-cancel" class="btn-small" type="button">Close</button>
-                <button id="file-modal-save" class="btn-primary" type="button">Save</button>
+                <div class="file-modal-actions-start">
+                    <button id="file-modal-rename" class="btn-small" type="button">Rename</button>
+                    <button id="file-modal-delete" class="btn-small file-modal-danger" type="button">Delete</button>
+                </div>
+                <div class="file-modal-actions-end">
+                    <button id="file-modal-cancel" class="btn-small" type="button">Close</button>
+                    <button id="file-modal-save" class="btn-primary" type="button">Save</button>
+                </div>
             </div>
         </div>
     </div>

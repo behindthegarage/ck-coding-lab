@@ -136,15 +136,24 @@ function isFileModalDirty() {
     return editor.value !== currentFileOriginalContent;
 }
 
+function getCurrentFileRecord() {
+    return projectFiles.find(file => String(file.id) === String(currentFileId)) || null;
+}
+
 function updateFileModalSaveState() {
     const saveBtn = document.getElementById('file-modal-save');
+    const renameBtn = document.getElementById('file-modal-rename');
+    const deleteBtn = document.getElementById('file-modal-delete');
     const editor = document.getElementById('modal-file-editor');
-    if (!saveBtn || !editor) return;
+    if (!saveBtn || !renameBtn || !deleteBtn || !editor) return;
 
     const dirty = isFileModalDirty();
-    saveBtn.disabled = fileModalSaving || currentFileId === null || !dirty;
+    const hasFile = currentFileId !== null;
+    saveBtn.disabled = fileModalSaving || !hasFile || !dirty;
+    renameBtn.disabled = fileModalSaving || !hasFile;
+    deleteBtn.disabled = fileModalSaving || !hasFile;
     saveBtn.textContent = fileModalSaving ? 'Saving...' : 'Save';
-    editor.disabled = fileModalSaving || currentFileId === null;
+    editor.disabled = fileModalSaving || !hasFile;
 }
 
 function confirmDiscardFileModalChanges() {
@@ -250,6 +259,107 @@ async function saveCurrentFile() {
     } catch (error) {
         console.error('Error saving file:', error);
         setFileModalStatus(error.message || 'Failed to save file.', 'error');
+    } finally {
+        fileModalSaving = false;
+        updateFileModalSaveState();
+    }
+}
+
+async function renameCurrentFile() {
+    if (currentFileId === null || fileModalSaving) return;
+
+    const file = getCurrentFileRecord();
+    if (!file) return;
+
+    if (isFileModalDirty() && !confirm('Rename this file and discard unsaved changes?')) {
+        return;
+    }
+
+    const nextFilenameInput = prompt('Rename file:', file.filename);
+    if (nextFilenameInput === null) return;
+
+    const nextFilename = nextFilenameInput.trim();
+    if (!nextFilename) {
+        alert('Filename is required.');
+        return;
+    }
+
+    if (nextFilename.includes('/') || nextFilename.includes('\\') || nextFilename.includes('..')) {
+        alert('Filename cannot include folders or ..');
+        return;
+    }
+
+    if (nextFilename === file.filename) {
+        return;
+    }
+
+    if (projectFiles.some(item => String(item.id) !== String(currentFileId) && item.filename === nextFilename)) {
+        alert(`A file named ${nextFilename} already exists.`);
+        return;
+    }
+
+    fileModalSaving = true;
+    setFileModalStatus('Renaming file...', 'info');
+    updateFileModalSaveState();
+
+    try {
+        const data = await apiRequest(`/files/${currentFileId}/rename`, {
+            method: 'PUT',
+            body: { filename: nextFilename }
+        });
+
+        if (!data || !data.success) {
+            setFileModalStatus(data?.error || 'Failed to rename file.', 'error');
+            return;
+        }
+
+        document.getElementById('modal-filename').textContent = data.file.filename;
+        currentFileOriginalContent = data.file.content || '';
+        document.getElementById('modal-file-editor').value = currentFileOriginalContent;
+        await refreshWorkspaceAfterFileSave();
+        setFileModalStatus(`Renamed to ${data.file.filename}.`, 'success');
+    } catch (error) {
+        console.error('Error renaming file:', error);
+        setFileModalStatus(error.message || 'Failed to rename file.', 'error');
+    } finally {
+        fileModalSaving = false;
+        updateFileModalSaveState();
+    }
+}
+
+async function deleteCurrentFile() {
+    if (currentFileId === null || fileModalSaving) return;
+
+    const file = getCurrentFileRecord();
+    if (!file) return;
+
+    if (isFileModalDirty() && !confirm('Delete this file and discard unsaved changes?')) {
+        return;
+    }
+
+    const confirmed = confirm(`Delete ${file.filename}?\n\nYou can restore it later from Version History if you saved a version first.`);
+    if (!confirmed) return;
+
+    fileModalSaving = true;
+    setFileModalStatus('Deleting file...', 'info');
+    updateFileModalSaveState();
+
+    try {
+        const data = await apiRequest(`/files/${currentFileId}`, {
+            method: 'DELETE'
+        });
+
+        if (!data || !data.success) {
+            setFileModalStatus(data?.error || 'Failed to delete file.', 'error');
+            return;
+        }
+
+        closeFileModal(true);
+        await refreshWorkspaceAfterFileSave();
+        alert(`Deleted ${file.filename}.`);
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        setFileModalStatus(error.message || 'Failed to delete file.', 'error');
     } finally {
         fileModalSaving = false;
         updateFileModalSaveState();
@@ -1273,6 +1383,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // File modal controls
     document.getElementById('modal-close').addEventListener('click', () => closeFileModal());
     document.getElementById('file-modal-cancel').addEventListener('click', () => closeFileModal());
+    document.getElementById('file-modal-rename').addEventListener('click', renameCurrentFile);
+    document.getElementById('file-modal-delete').addEventListener('click', deleteCurrentFile);
     document.getElementById('file-modal-save').addEventListener('click', saveCurrentFile);
     document.getElementById('modal-file-editor').addEventListener('input', () => {
         setFileModalStatus(isFileModalDirty() ? 'Unsaved changes.' : '', 'info');

@@ -521,3 +521,76 @@ class TestProjectFilesAPI:
         conn.close()
 
         assert row['current_code'] == '<html><body>Saved from modal</body></html>'
+
+    def test_renaming_file_by_id_updates_filename_and_keeps_current_code_synced(self, client, auth_headers, project_factory, db_path):
+        """Renaming a file should update the filename without losing primary code state."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'index.html', '<html><body>Rename me</body></html>'))
+        file_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.put(
+            f'/api/files/{file_id}/rename',
+            headers=auth_headers,
+            json={'filename': 'page.html'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['file']['filename'] == 'page.html'
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['current_code'] == '<html><body>Rename me</body></html>'
+
+    def test_deleting_primary_code_file_clears_current_code(self, client, auth_headers, project_factory, db_path):
+        """Deleting the only primary code file should clear projects.current_code."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'index.html', '<html><body>Delete me</body></html>'))
+        file_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.delete(
+            f'/api/files/{file_id}',
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()['success'] is True
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['current_code'] == ''

@@ -49,6 +49,19 @@ def verify_project_access(project_id, user_id):
         return db.fetchone() is not None
 
 
+def validate_filename(filename):
+    """Validate a project filename."""
+    filename = (filename or '').strip()
+
+    if not filename or len(filename) > 255:
+        return False, "Invalid filename"
+
+    if '/' in filename or '\\' in filename or '..' in filename:
+        return False, "Invalid filename"
+
+    return True, filename
+
+
 # ============ PROJECT FILE ROUTES ============
 
 @file_bp.route('/projects/<int:project_id>/files', methods=['GET'])
@@ -91,16 +104,11 @@ def create_project_file(project_id):
     if not data or 'filename' not in data:
         return jsonify({"success": False, "error": "Filename is required"}), 400
     
-    filename = data['filename'].strip()
+    is_valid, filename = validate_filename(data['filename'])
     content = data.get('content', '')
-    
-    # Validate filename
-    if not filename or len(filename) > 255:
-        return jsonify({"success": False, "error": "Invalid filename"}), 400
-    
-    # Prevent path traversal
-    if '/' in filename or '\\' in filename or '..' in filename:
-        return jsonify({"success": False, "error": "Invalid filename"}), 400
+
+    if not is_valid:
+        return jsonify({"success": False, "error": filename}), 400
     
     if not verify_project_access(project_id, user_id):
         return jsonify({"success": False, "error": "Project not found"}), 404
@@ -213,6 +221,67 @@ def update_file(file_id):
         db.execute('SELECT * FROM project_files WHERE id = ?', (file_id,))
         file_data = row_to_dict(db.fetchone())
     
+    return jsonify({"success": True, "file": file_data})
+
+
+@file_bp.route('/files/<int:file_id>/rename', methods=['PUT'])
+@require_auth
+def rename_file(file_id):
+    """Rename a file."""
+    user_id = g.current_user['id']
+    data = request.get_json()
+
+    if not data or 'filename' not in data:
+        return jsonify({"success": False, "error": "Filename is required"}), 400
+
+    is_valid, new_filename = validate_filename(data['filename'])
+    if not is_valid:
+        return jsonify({"success": False, "error": new_filename}), 400
+
+    with get_db() as db:
+        db.execute('''
+            SELECT pf.id, pf.filename, pf.project_id, p.user_id as project_owner_id,
+                   p.language, p.current_code
+            FROM project_files pf
+            JOIN projects p ON pf.project_id = p.id
+            WHERE pf.id = ?
+        ''', (file_id,))
+
+        row = db.fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "File not found"}), 404
+
+        if row['project_owner_id'] != user_id:
+            return jsonify({"success": False, "error": "Access denied"}), 403
+
+        if row['filename'] == new_filename:
+            db.execute('SELECT * FROM project_files WHERE id = ?', (file_id,))
+            return jsonify({"success": True, "file": row_to_dict(db.fetchone())})
+
+        db.execute('''
+            SELECT id FROM project_files
+            WHERE project_id = ? AND filename = ? AND id != ?
+        ''', (row['project_id'], new_filename, file_id))
+        if db.fetchone():
+            return jsonify({"success": False, "error": "File already exists"}), 409
+
+        db.execute('''
+            UPDATE project_files
+            SET filename = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (new_filename, file_id))
+
+        sync_current_code_cache(
+            db,
+            row['project_id'],
+            row['language'] or 'undecided',
+            fallback_current_code=row['current_code'] or '',
+            touch_project=True
+        )
+
+        db.execute('SELECT * FROM project_files WHERE id = ?', (file_id,))
+        file_data = row_to_dict(db.fetchone())
+
     return jsonify({"success": True, "file": file_data})
 
 
