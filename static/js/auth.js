@@ -98,7 +98,27 @@ async function apiRequest(url, options = {}) {
         return null;
     }
 
-    return response.json();
+    const contentType = response.headers.get('content-type') || '';
+    const raw = await response.text();
+
+    if (!contentType.includes('application/json')) {
+        const snippet = raw.replace(/\s+/g, ' ').trim().slice(0, 160);
+        return {
+            success: false,
+            error: response.ok
+                ? 'Server returned a non-JSON response.'
+                : `Server error (${response.status}). ${snippet || 'No details available.'}`
+        };
+    }
+
+    try {
+        return raw ? JSON.parse(raw) : { success: response.ok };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Invalid JSON from server (${response.status}).`
+        };
+    }
 }
 
 // Redirect to login if not authenticated
