@@ -454,3 +454,43 @@ class TestProjectFilesAPI:
         conn.close()
 
         assert 'ellipse' in row['current_code']
+
+    def test_updating_file_by_id_returns_saved_content_and_syncs_current_code(self, client, auth_headers, project_factory, db_path):
+        """The direct file update endpoint should return saved content and refresh current_code."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', ('stale code', project_id))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'index.html', '<html><body>Old</body></html>'))
+        file_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.put(
+            f'/api/files/{file_id}',
+            headers=auth_headers,
+            json={'content': '<html><body>Saved from modal</body></html>'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['file']['id'] == file_id
+        assert data['file']['content'] == '<html><body>Saved from modal</body></html>'
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['current_code'] == '<html><body>Saved from modal</body></html>'

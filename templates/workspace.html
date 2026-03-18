@@ -124,7 +124,20 @@
                 <h3 id="modal-filename">File</h3>
                 <button class="modal-close" id="modal-close">×</button>
             </div>
-            <pre id="modal-file-content" class="modal-file-content"><code>Loading...</code></pre>
+            <div id="file-modal-status" class="file-modal-status hidden"></div>
+            <textarea
+                id="modal-file-editor"
+                class="modal-file-editor"
+                spellcheck="false"
+                autocapitalize="off"
+                autocomplete="off"
+                autocorrect="off"
+                placeholder="File contents will appear here..."
+            ></textarea>
+            <div class="modal-actions file-modal-actions">
+                <button id="file-modal-cancel" class="btn-small" type="button">Close</button>
+                <button id="file-modal-save" class="btn-primary" type="button">Save</button>
+            </div>
         </div>
     </div>
 

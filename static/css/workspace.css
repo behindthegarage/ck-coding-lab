@@ -513,6 +513,74 @@
 }
 
 /* ============================================
+   FILE EDIT MODAL
+   ============================================ */
+
+.file-modal-status {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: rgba(148, 163, 184, 0.08);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.file-modal-status.success {
+    border-color: rgba(16, 185, 129, 0.45);
+    background: rgba(16, 185, 129, 0.12);
+    color: #bbf7d0;
+}
+
+.file-modal-status.error {
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.12);
+    color: #fecaca;
+}
+
+.modal-file-editor {
+    flex: 1;
+    width: 100%;
+    min-height: 360px;
+    resize: vertical;
+    margin: 0;
+    padding: 1rem;
+    background: var(--bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: pre;
+    color: var(--text);
+}
+
+.modal-file-editor:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.modal-file-editor:disabled {
+    opacity: 0.75;
+    cursor: wait;
+}
+
+.file-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.file-modal-actions .btn-primary[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ============================================
    VERSION HISTORY MODAL
    ============================================ */
 

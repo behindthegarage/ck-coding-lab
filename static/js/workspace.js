@@ -17,6 +17,8 @@ let currentCode = '';
 let sandboxRunner = null;
 let pendingUpload = null;
 let currentFileId = null;
+let currentFileOriginalContent = '';
+let fileModalSaving = false;
 let versions = [];
 let sidebarCollapsed = false;
 let previewCollapsed = false;
@@ -70,6 +72,10 @@ function loadFileTree() {
         fileEl.className = 'file-item';
         fileEl.dataset.fileId = file.id;
         fileEl.dataset.filename = file.filename;
+
+        if (String(currentFileId) === String(file.id)) {
+            fileEl.classList.add('active');
+        }
         
         // Determine icon and badge
         let icon = '📄';
@@ -110,10 +116,68 @@ function loadFileTree() {
     });
 }
 
-// View a file's contents (now opens in modal instead of tab)
+function setFileModalStatus(message = '', type = 'info') {
+    const status = document.getElementById('file-modal-status');
+    if (!status) return;
+
+    if (!message) {
+        status.textContent = '';
+        status.className = 'file-modal-status hidden';
+        return;
+    }
+
+    status.textContent = message;
+    status.className = `file-modal-status ${type}`;
+}
+
+function isFileModalDirty() {
+    const editor = document.getElementById('modal-file-editor');
+    if (!editor || currentFileId === null) return false;
+    return editor.value !== currentFileOriginalContent;
+}
+
+function updateFileModalSaveState() {
+    const saveBtn = document.getElementById('file-modal-save');
+    const editor = document.getElementById('modal-file-editor');
+    if (!saveBtn || !editor) return;
+
+    const dirty = isFileModalDirty();
+    saveBtn.disabled = fileModalSaving || currentFileId === null || !dirty;
+    saveBtn.textContent = fileModalSaving ? 'Saving...' : 'Save';
+    editor.disabled = fileModalSaving || currentFileId === null;
+}
+
+function confirmDiscardFileModalChanges() {
+    if (!isFileModalDirty()) return true;
+    return confirm('Discard unsaved changes?');
+}
+
+async function refreshWorkspaceAfterFileSave() {
+    const data = await apiRequest(`/projects/${projectId}`);
+    if (!data || !data.success) return;
+
+    project = data.project;
+    projectFiles = data.files || [];
+    currentCode = project.current_code || '';
+
+    loadFileTree();
+    updateCodeDisplay();
+
+    if (project.language !== 'python') {
+        runPreview();
+    }
+}
+
+// View a file's contents (opens in editable modal)
 async function viewFile(fileId, filename) {
+    const fileModal = document.getElementById('file-modal');
+    if (currentFileId !== null && fileModal && !fileModal.classList.contains('hidden') && !confirmDiscardFileModalChanges()) {
+        return;
+    }
+
     currentFileId = fileId;
-    
+    currentFileOriginalContent = 'Loading...';
+
     // Update active state in sidebar
     document.querySelectorAll('.file-item').forEach(el => {
         el.classList.remove('active');
@@ -121,31 +185,92 @@ async function viewFile(fileId, filename) {
             el.classList.add('active');
         }
     });
-    
+
     // Show modal
     const modal = document.getElementById('file-modal');
     const modalFilename = document.getElementById('modal-filename');
-    const modalContent = document.getElementById('modal-file-content');
-    
+    const modalEditor = document.getElementById('modal-file-editor');
+
     modalFilename.textContent = filename;
-    modalContent.textContent = 'Loading...';
+    modalEditor.value = 'Loading...';
     modal.classList.remove('hidden');
-    
+    setFileModalStatus('Loading file...', 'info');
+    updateFileModalSaveState();
+
     // Fetch file content
     const data = await apiRequest(`/files/${fileId}`);
-    
+
     if (data && data.success) {
-        modalContent.textContent = data.file.content || '// File is empty';
+        currentFileOriginalContent = data.file.content || '';
+        modalEditor.value = currentFileOriginalContent;
+        setFileModalStatus('', 'info');
+        updateFileModalSaveState();
+        modalEditor.focus();
+        modalEditor.setSelectionRange(0, 0);
     } else {
-        modalContent.textContent = 'Error loading file';
+        modalEditor.value = '';
+        currentFileOriginalContent = '';
+        setFileModalStatus(data?.error || 'Error loading file.', 'error');
+        updateFileModalSaveState();
+    }
+}
+
+async function saveCurrentFile() {
+    if (currentFileId === null || fileModalSaving) return;
+
+    const editor = document.getElementById('modal-file-editor');
+    if (!editor) return;
+
+    const content = editor.value;
+    if (content === currentFileOriginalContent) {
+        setFileModalStatus('No changes to save.', 'info');
+        updateFileModalSaveState();
+        return;
+    }
+
+    fileModalSaving = true;
+    setFileModalStatus('Saving changes...', 'info');
+    updateFileModalSaveState();
+
+    try {
+        const data = await apiRequest(`/files/${currentFileId}`, {
+            method: 'PUT',
+            body: { content }
+        });
+
+        if (!data || !data.success) {
+            setFileModalStatus(data?.error || 'Failed to save file.', 'error');
+            return;
+        }
+
+        currentFileOriginalContent = data.file.content || '';
+        editor.value = currentFileOriginalContent;
+        setFileModalStatus('Saved.', 'success');
+        await refreshWorkspaceAfterFileSave();
+    } catch (error) {
+        console.error('Error saving file:', error);
+        setFileModalStatus(error.message || 'Failed to save file.', 'error');
+    } finally {
+        fileModalSaving = false;
+        updateFileModalSaveState();
     }
 }
 
 // Close file modal
-function closeFileModal() {
+function closeFileModal(force = false) {
+    if (!force && !confirmDiscardFileModalChanges()) {
+        return false;
+    }
+
     document.getElementById('file-modal').classList.add('hidden');
     document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('modal-file-editor').value = '';
+    setFileModalStatus('', 'info');
     currentFileId = null;
+    currentFileOriginalContent = '';
+    fileModalSaving = false;
+    updateFileModalSaveState();
+    return true;
 }
 
 function openVersionsModal() {
@@ -275,7 +400,7 @@ async function restoreVersion(version, buttonEl) {
             return;
         }
 
-        closeFileModal();
+        closeFileModal(true);
         await loadProject();
         await loadVersions();
         setVersionsStatus(`Restored "${description}".`, 'success');
@@ -1110,8 +1235,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Modal close buttons
-    document.getElementById('modal-close').addEventListener('click', closeFileModal);
+    // File modal controls
+    document.getElementById('modal-close').addEventListener('click', () => closeFileModal());
+    document.getElementById('file-modal-cancel').addEventListener('click', () => closeFileModal());
+    document.getElementById('file-modal-save').addEventListener('click', saveCurrentFile);
+    document.getElementById('modal-file-editor').addEventListener('input', () => {
+        setFileModalStatus(isFileModalDirty() ? 'Unsaved changes.' : '', 'info');
+        updateFileModalSaveState();
+    });
+    document.getElementById('modal-file-editor').addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            saveCurrentFile();
+        }
+    });
+
     document.getElementById('versions-modal-close').addEventListener('click', closeVersionsModal);
     
     // Close modals when clicking outside
@@ -1125,6 +1263,14 @@ document.addEventListener('DOMContentLoaded', () => {
             closeVersionsModal();
         }
     });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('file-modal').classList.contains('hidden')) {
+            closeFileModal();
+        }
+    });
+
+    updateFileModalSaveState();
     
     // New file button
     document.getElementById('new-file-btn').addEventListener('click', () => {
