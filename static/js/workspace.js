@@ -1066,23 +1066,19 @@ async function sendMessage(message) {
     const input = document.getElementById('chat-input');
     const thinking = document.getElementById('thinking-indicator');
     const sendBtn = document.getElementById('send-btn');
+    const trimmedMessage = (message || '').trim();
+
+    if (!trimmedMessage && !pendingUpload) {
+        return;
+    }
 
     input.value = '';
     thinking.classList.remove('hidden');
     sendBtn.disabled = true;
 
-    // Build message content
-    let messageContent = message;
+    const messageContent = buildUploadMessage(trimmedMessage);
     if (pendingUpload) {
-        messageContent = `[Uploaded: ${pendingUpload.name}]\n\n${message}`;
-        if (pendingUpload.type === 'text') {
-            messageContent += `\n\nFile contents:\n\`\`\`\n${pendingUpload.content}\n\`\`\``;
-        } else if (pendingUpload.type === 'image') {
-            messageContent += `\n\n[Image attached: ${pendingUpload.name}]`;
-        }
-        pendingUpload = null;
-        document.getElementById('upload-preview').classList.add('hidden');
-        document.getElementById('upload-preview').textContent = '';
+        clearPendingUpload();
     }
 
     const container = document.getElementById('chat-messages');
@@ -1190,45 +1186,208 @@ async function refreshFileTree() {
     }
 }
 
-// Handle file upload
+function getUploadInput() {
+    return document.getElementById('chat-upload');
+}
+
+function getUploadPreview() {
+    return document.getElementById('upload-preview');
+}
+
+function getUploadDropzone() {
+    return document.getElementById('upload-dropzone');
+}
+
+function getUploadClearButton() {
+    return document.getElementById('upload-clear');
+}
+
+function formatUploadSize(bytes = 0) {
+    if (!bytes) return '0 KB';
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function getUploadReadyMessage(upload) {
+    if (!upload) {
+        return 'Images are shared with Hari. Text files get pasted into chat.';
+    }
+
+    if (upload.type === 'image') {
+        return `📷 ${upload.name} · ${upload.sizeLabel} · Ready to send. Hari will look at this image when you press Send.`;
+    }
+
+    return `📄 ${upload.name} · ${upload.sizeLabel} · Ready to send. Hari will read the file contents when you press Send.`;
+}
+
+function updatePendingUploadUI() {
+    const dropzone = getUploadDropzone();
+    const preview = getUploadPreview();
+    const clearBtn = getUploadClearButton();
+    const input = document.getElementById('chat-input');
+
+    if (!dropzone || !preview || !clearBtn || !input) return;
+
+    dropzone.classList.toggle('has-file', Boolean(pendingUpload));
+    preview.textContent = getUploadReadyMessage(pendingUpload);
+    clearBtn.classList.toggle('hidden', !pendingUpload);
+    input.placeholder = pendingUpload
+        ? `Add a note for ${pendingUpload.name}, or press Send to use a starter prompt.`
+        : 'Describe what you want to build...';
+}
+
+function clearPendingUpload(options = {}) {
+    pendingUpload = null;
+    const input = getUploadInput();
+    const dropzone = getUploadDropzone();
+
+    if (input) {
+        input.value = '';
+    }
+    if (dropzone) {
+        dropzone.classList.remove('drag-active');
+    }
+
+    updatePendingUploadUI();
+
+    if (options.toast) {
+        showWorkspaceToast(options.toast, 'info', 2400);
+    }
+}
+
+function buildUploadMessage(message) {
+    const trimmedMessage = (message || '').trim();
+    if (!pendingUpload) {
+        return trimmedMessage;
+    }
+
+    const starterPrompt = pendingUpload.defaultPrompt || 'Please help me use this file in my project.';
+    let messageContent = `[Uploaded: ${pendingUpload.name}]\n\n${trimmedMessage || starterPrompt}`;
+
+    if (pendingUpload.type === 'text') {
+        messageContent += `\n\nFile contents:\n\`\`\`\n${pendingUpload.content}\n\`\`\``;
+    } else if (pendingUpload.type === 'image') {
+        messageContent += `\n\n[Image attached: ${pendingUpload.name}]`;
+    }
+
+    return messageContent;
+}
+
+function openUploadPicker() {
+    const input = getUploadInput();
+    if (input) {
+        input.click();
+    }
+}
+
 function handleFileUpload(file) {
     if (!file) return;
-    
+
     const maxSize = 5 * 1024 * 1024; // 5MB limit
     if (file.size > maxSize) {
         showWorkspaceToast('File too large. Max size is 5MB.', 'error', 4200);
         return;
     }
-    
-    const preview = document.getElementById('upload-preview');
-    
+
+    const lowerName = file.name.toLowerCase();
+    const baseUpload = {
+        name: file.name,
+        sizeLabel: formatUploadSize(file.size)
+    };
+
     if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
             pendingUpload = {
-                name: file.name,
+                ...baseUpload,
                 type: 'image',
-                content: e.target.result // base64
+                content: e.target.result,
+                defaultPrompt: 'Please look at this image and help me use it in my project.'
             };
-            preview.textContent = `📷 ${file.name}`;
-            preview.classList.remove('hidden');
+            updatePendingUploadUI();
+            showWorkspaceToast(`${file.name} is ready to send.`, 'success', 2400);
         };
         reader.readAsDataURL(file);
-    } else if (file.type === 'text/plain' || file.name.match(/\.(js|html|css|txt|json|py)$/)) {
+        return;
+    }
+
+    if (file.type === 'text/plain' || lowerName.match(/\.(js|html|css|txt|json|py|md)$/)) {
         const reader = new FileReader();
         reader.onload = (e) => {
             pendingUpload = {
-                name: file.name,
+                ...baseUpload,
                 type: 'text',
-                content: e.target.result
+                content: e.target.result,
+                defaultPrompt: `Please help me import ${file.name} into this project.`
             };
-            preview.textContent = `📄 ${file.name}`;
-            preview.classList.remove('hidden');
+            updatePendingUploadUI();
+            showWorkspaceToast(`${file.name} is ready to send.`, 'success', 2400);
         };
         reader.readAsText(file);
-    } else {
-        showWorkspaceToast('Unsupported file type. Please upload images, text files, or code files.', 'error', 4200);
+        return;
     }
+
+    showWorkspaceToast('Unsupported file type. Please upload images, text files, or code files.', 'error', 4200);
+}
+
+function setupUploadDropzone() {
+    const dropzone = getUploadDropzone();
+    if (!dropzone) return;
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            dropzone.classList.add('drag-active');
+        });
+    });
+
+    ['dragleave', 'dragend'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            if (!dropzone.contains(e.relatedTarget)) {
+                dropzone.classList.remove('drag-active');
+            }
+        });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('drag-active');
+        const files = Array.from(e.dataTransfer?.files || []);
+        if (files.length === 0) return;
+        if (files.length > 1) {
+            showWorkspaceToast('Using the first dropped file for now.', 'info', 2400);
+        }
+        handleFileUpload(files[0]);
+    });
+
+    dropzone.addEventListener('click', (e) => {
+        if (e.target.closest('#upload-clear') || e.target.closest('#chat-upload') || e.target.closest('.upload-btn')) {
+            return;
+        }
+        openUploadPicker();
+    });
+
+    dropzone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openUploadPicker();
+        }
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (e.dataTransfer?.types?.includes('Files')) {
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('drop', (e) => {
+        if (e.dataTransfer?.types?.includes('Files') && !dropzone.contains(e.target)) {
+            e.preventDefault();
+        }
+    });
 }
 
 async function createNewFile() {
@@ -1469,20 +1628,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Send button
     document.getElementById('send-btn').addEventListener('click', () => {
         const input = document.getElementById('chat-input');
-        const message = input.value.trim();
-        if (message) {
-            sendMessage(message);
-        }
+        sendMessage(input.value);
     });
 
     // Enter to send (Shift+Enter for new line)
     document.getElementById('chat-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            const message = e.target.value.trim();
-            if (message) {
-                sendMessage(message);
-            }
+            sendMessage(e.target.value);
         }
     });
 
@@ -1526,7 +1679,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (file) {
             handleFileUpload(file);
         }
+        e.target.value = '';
     });
+    document.getElementById('upload-clear').addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearPendingUpload({ toast: 'Removed the selected upload.' });
+    });
+    setupUploadDropzone();
+    updatePendingUploadUI();
     
     // File modal controls
     document.getElementById('modal-close').addEventListener('click', async () => await closeFileModal());

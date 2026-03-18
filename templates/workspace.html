@@ -76,12 +76,16 @@
                         <button id="send-btn" class="btn-primary">Send</button>
                     </div>
                     
-                    <div class="chat-toolbar">
+                    <div id="upload-dropzone" class="chat-toolbar upload-dropzone" tabindex="0" role="button" aria-label="Upload a file by clicking or dragging it here">
                         <label class="upload-btn" title="Upload image or file">
-                            <input type="file" id="chat-upload" accept="image/*,.txt,.js,.html,.css,.py" hidden>
+                            <input type="file" id="chat-upload" accept="image/*,.txt,.md,.js,.html,.css,.py,.json" hidden>
                             📎 Upload
                         </label>
-                        <span id="upload-preview" class="upload-preview hidden"></span>
+                        <div class="upload-copy">
+                            <span class="upload-hint">Drop an image or code file here, or tap Upload.</span>
+                            <span id="upload-preview" class="upload-preview">Images are shared with Hari. Text files get pasted into chat.</span>
+                        </div>
+                        <button id="upload-clear" class="upload-clear hidden" type="button" aria-label="Remove selected upload">✕</button>
                     </div>
                 </div>
             </div>
