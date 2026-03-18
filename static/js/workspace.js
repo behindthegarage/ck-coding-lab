@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 40 - Three-pane workspace layout
+// Version 41 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -23,6 +23,7 @@ let fileActionDialogState = null;
 let workspaceToastTimer = null;
 let versions = [];
 let fileSearchQuery = '';
+let activeFileMenuId = null;
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let isMobile = window.innerWidth < 768;
@@ -74,6 +75,115 @@ function getFilteredProjectFiles() {
     return projectFiles.filter(file => (file.filename || '').toLowerCase().includes(query));
 }
 
+function getProjectFileById(fileId) {
+    return projectFiles.find(file => String(file.id) === String(fileId)) || null;
+}
+
+function closeAllFileMenus() {
+    activeFileMenuId = null;
+    document.querySelectorAll('.file-item').forEach(el => el.classList.remove('menu-open'));
+}
+
+function toggleFileMenu(fileId) {
+    activeFileMenuId = String(activeFileMenuId) === String(fileId) ? null : String(fileId);
+    document.querySelectorAll('.file-item').forEach(el => {
+        el.classList.toggle('menu-open', String(el.dataset.fileId) === String(activeFileMenuId));
+    });
+}
+
+async function renameProjectFileById(fileId) {
+    const file = getProjectFileById(fileId);
+    if (!file) return;
+
+    if (String(currentFileId) === String(fileId)) {
+        await renameCurrentFile();
+        return;
+    }
+
+    const action = await showFileActionDialog({
+        title: 'Rename file',
+        message: `Choose a new name for ${file.filename}.`,
+        confirmLabel: 'Rename file',
+        confirmClass: 'btn-primary',
+        initialValue: file.filename,
+        inputLabel: 'New filename',
+        placeholder: file.filename,
+        needsInput: true,
+        validate: (value) => {
+            if (value === file.filename) return '';
+            return validateFilenameInput(value, { existingId: fileId });
+        }
+    });
+
+    if (!action.confirmed || action.value === file.filename) return;
+
+    const data = await apiRequest(`/files/${fileId}/rename`, {
+        method: 'PUT',
+        body: { filename: action.value }
+    });
+
+    if (!data || !data.success) {
+        showWorkspaceToast(data?.error || 'Failed to rename file.', 'error', 4200);
+        return;
+    }
+
+    await refreshWorkspaceAfterFileSave();
+    showWorkspaceToast(`Renamed to ${data.file.filename}.`, 'success');
+}
+
+async function deleteProjectFileById(fileId) {
+    const file = getProjectFileById(fileId);
+    if (!file) return;
+
+    if (String(currentFileId) === String(fileId)) {
+        await deleteCurrentFile();
+        return;
+    }
+
+    const action = await showFileActionDialog({
+        title: 'Delete file',
+        message: `Delete ${file.filename}? If you saved a version first, you can restore it later from Version History.`,
+        confirmLabel: 'Delete file',
+        confirmClass: 'btn-small file-modal-danger',
+        needsInput: false
+    });
+
+    if (!action.confirmed) return;
+
+    const data = await apiRequest(`/files/${fileId}`, {
+        method: 'DELETE'
+    });
+
+    if (!data || !data.success) {
+        showWorkspaceToast(data?.error || 'Failed to delete file.', 'error', 4200);
+        return;
+    }
+
+    await refreshWorkspaceAfterFileSave();
+    showWorkspaceToast(`Deleted ${file.filename}.`, 'success');
+}
+
+async function handleFileMenuAction(action, fileId) {
+    closeAllFileMenus();
+
+    if (action === 'open') {
+        const file = getProjectFileById(fileId);
+        if (file) {
+            await viewFile(file.id, file.filename);
+        }
+        return;
+    }
+
+    if (action === 'rename') {
+        await renameProjectFileById(fileId);
+        return;
+    }
+
+    if (action === 'delete') {
+        await deleteProjectFileById(fileId);
+    }
+}
+
 // Load file tree in sidebar
 function loadFileTree() {
     const container = document.getElementById('file-tree');
@@ -101,6 +211,9 @@ function loadFileTree() {
 
         if (String(currentFileId) === String(file.id)) {
             fileEl.classList.add('active');
+        }
+        if (String(activeFileMenuId) === String(file.id)) {
+            fileEl.classList.add('menu-open');
         }
         
         // Determine icon and badge
@@ -131,12 +244,37 @@ function loadFileTree() {
         }
         
         fileEl.innerHTML = `
-            <span class="file-icon">${icon}</span>
-            <span class="file-name">${escapeHtml(file.filename)}</span>
-            ${badge ? `<span class="file-badge">${badge}</span>` : ''}
+            <div class="file-item-main">
+                <span class="file-icon">${icon}</span>
+                <span class="file-name">${escapeHtml(file.filename)}</span>
+                ${badge ? `<span class="file-badge">${badge}</span>` : ''}
+            </div>
+            <div class="file-item-actions">
+                <button class="file-menu-toggle" type="button" aria-label="File actions">⋯</button>
+                <div class="file-action-menu">
+                    <button class="file-action-menu-item" type="button" data-file-action="open">Open</button>
+                    <button class="file-action-menu-item" type="button" data-file-action="rename">Rename</button>
+                    <button class="file-action-menu-item danger" type="button" data-file-action="delete">Delete</button>
+                </div>
+            </div>
         `;
-        
-        fileEl.addEventListener('click', () => viewFile(file.id, file.filename));
+
+        fileEl.querySelector('.file-item-main').addEventListener('click', async () => {
+            closeAllFileMenus();
+            await viewFile(file.id, file.filename);
+        });
+
+        fileEl.querySelector('.file-menu-toggle').addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleFileMenu(file.id);
+        });
+
+        fileEl.querySelectorAll('.file-action-menu-item').forEach((button) => {
+            button.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                await handleFileMenuAction(button.dataset.fileAction, file.id);
+            });
+        });
         
         container.appendChild(fileEl);
     });
@@ -144,6 +282,7 @@ function loadFileTree() {
 
 function setFileSearchQuery(value = '') {
     fileSearchQuery = value.trimStart();
+    activeFileMenuId = null;
     loadFileTree();
 }
 
@@ -366,6 +505,7 @@ async function refreshWorkspaceAfterFileSave() {
     project = data.project;
     projectFiles = data.files || [];
     currentCode = project.current_code || '';
+    activeFileMenuId = null;
 
     loadFileTree();
     updateCodeDisplay();
@@ -1526,6 +1666,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.file-item-actions')) {
+            closeAllFileMenus();
+        }
+    });
+
     // Send button
     document.getElementById('send-btn').addEventListener('click', () => {
         const input = document.getElementById('chat-input');
@@ -1671,6 +1817,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape') {
             if (!document.getElementById('file-action-modal').classList.contains('hidden')) {
                 closeFileActionDialog();
+                return;
+            }
+            if (activeFileMenuId !== null) {
+                closeAllFileMenus();
                 return;
             }
             if (!document.getElementById('file-modal').classList.contains('hidden')) {
