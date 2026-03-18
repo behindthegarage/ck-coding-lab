@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 41 - Three-pane workspace layout
+// Version 42 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -24,6 +24,7 @@ let workspaceToastTimer = null;
 let versions = [];
 let fileSearchQuery = '';
 let activeFileMenuId = null;
+let fileSortMode = 'smart';
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let isMobile = window.innerWidth < 768;
@@ -69,10 +70,97 @@ function updateFileSearchUI() {
     clearBtn.classList.toggle('hidden', !fileSearchQuery);
 }
 
+function getFileSortLabel() {
+    if (fileSortMode === 'name') return 'Name';
+    if (fileSortMode === 'type') return 'Type';
+    return 'Smart';
+}
+
+function getFileTypeLabel(filename = '') {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.html')) return 'html';
+    if (lower.endsWith('.css')) return 'css';
+    if (lower.endsWith('.js')) return 'js';
+    if (lower.endsWith('.py')) return 'py';
+    if (lower.endsWith('.md')) return 'notes';
+    if (lower.match(/\.(png|jpg|jpeg|gif|webp|svg)$/)) return 'asset';
+    return 'other';
+}
+
+function getFilePriority(file) {
+    const name = (file.filename || '').toLowerCase();
+    const entryPriority = {
+        'index.html': 0,
+        'style.css': 1,
+        'styles.css': 1,
+        'script.js': 2,
+        'main.js': 2,
+        'app.js': 2,
+        'sketch.js': 2,
+        'game.py': 2,
+        'main.py': 2,
+        'design.md': 3,
+        'architecture.md': 4,
+        'todo.md': 5,
+        'notes.md': 6,
+    };
+    if (name in entryPriority) return entryPriority[name];
+
+    const typePriority = {
+        html: 10,
+        css: 11,
+        js: 12,
+        py: 13,
+        notes: 20,
+        asset: 30,
+        other: 40,
+    };
+
+    return typePriority[getFileTypeLabel(name)] ?? 40;
+}
+
+function sortProjectFiles(files) {
+    const sorted = [...files];
+
+    sorted.sort((a, b) => {
+        const aName = (a.filename || '').toLowerCase();
+        const bName = (b.filename || '').toLowerCase();
+
+        if (fileSortMode === 'name') {
+            return aName.localeCompare(bName);
+        }
+
+        if (fileSortMode === 'type') {
+            const typeCompare = getFileTypeLabel(aName).localeCompare(getFileTypeLabel(bName));
+            return typeCompare || aName.localeCompare(bName);
+        }
+
+        const priorityCompare = getFilePriority(a) - getFilePriority(b);
+        return priorityCompare || aName.localeCompare(bName);
+    });
+
+    return sorted;
+}
+
+function updateFileSearchUI() {
+    const input = document.getElementById('file-search-input');
+    const clearBtn = document.getElementById('file-search-clear');
+    const sortBtn = document.getElementById('file-sort-btn');
+    if (!input || !clearBtn) return;
+
+    input.value = fileSearchQuery;
+    clearBtn.classList.toggle('hidden', !fileSearchQuery);
+    if (sortBtn) {
+        sortBtn.textContent = `Sort: ${getFileSortLabel()}`;
+    }
+}
+
 function getFilteredProjectFiles() {
     const query = fileSearchQuery.trim().toLowerCase();
-    if (!query) return projectFiles;
-    return projectFiles.filter(file => (file.filename || '').toLowerCase().includes(query));
+    const filtered = !query
+        ? projectFiles
+        : projectFiles.filter(file => (file.filename || '').toLowerCase().includes(query));
+    return sortProjectFiles(filtered);
 }
 
 function getProjectFileById(fileId) {
@@ -1646,6 +1734,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('file-search-clear').addEventListener('click', () => {
         setFileSearchQuery('');
         document.getElementById('file-search-input').focus();
+    });
+    document.getElementById('file-sort-btn').addEventListener('click', () => {
+        const modes = ['smart', 'name', 'type'];
+        const currentIndex = modes.indexOf(fileSortMode);
+        fileSortMode = modes[(currentIndex + 1) % modes.length];
+        loadFileTree();
+        showWorkspaceToast(`File sort: ${getFileSortLabel()}`, 'info');
     });
 
     // Preview toggle (desktop) / close (mobile)

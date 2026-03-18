@@ -101,6 +101,25 @@
     color: var(--text);
 }
 
+.sidebar-sort-btn {
+    width: 100%;
+    margin-top: 0.65rem;
+    padding: 0.55rem 0.8rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-light);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sidebar-sort-btn:hover {
+    border-color: var(--primary);
+    color: var(--text);
+    background: var(--bg-lighter);
+}
+
 .file-tree {
     flex: 1;
     overflow-y: auto;
