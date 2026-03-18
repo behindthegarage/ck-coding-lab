@@ -316,9 +316,18 @@ function updateFileModalSaveState() {
     editor.disabled = fileModalSaving || !hasFile;
 }
 
-function confirmDiscardFileModalChanges() {
+async function confirmDiscardFileModalChanges(message = 'Discard unsaved changes?') {
     if (!isFileModalDirty()) return true;
-    return confirm('Discard unsaved changes?');
+
+    const action = await showFileActionDialog({
+        title: 'Discard unsaved changes',
+        message,
+        confirmLabel: 'Discard changes',
+        confirmClass: 'btn-small file-modal-danger',
+        needsInput: false
+    });
+
+    return action.confirmed;
 }
 
 async function refreshWorkspaceAfterFileSave() {
@@ -340,8 +349,11 @@ async function refreshWorkspaceAfterFileSave() {
 // View a file's contents (opens in editable modal)
 async function viewFile(fileId, filename) {
     const fileModal = document.getElementById('file-modal');
-    if (currentFileId !== null && fileModal && !fileModal.classList.contains('hidden') && !confirmDiscardFileModalChanges()) {
-        return;
+    if (currentFileId !== null && fileModal && !fileModal.classList.contains('hidden')) {
+        const canDiscard = await confirmDiscardFileModalChanges('Open a different file and discard your unsaved changes?');
+        if (!canDiscard) {
+            return;
+        }
     }
 
     currentFileId = fileId;
@@ -431,7 +443,7 @@ async function renameCurrentFile() {
     const file = getCurrentFileRecord();
     if (!file) return;
 
-    if (isFileModalDirty() && !confirm('Rename this file and discard unsaved changes?')) {
+    if (!(await confirmDiscardFileModalChanges('Rename this file and discard your unsaved changes?'))) {
         return;
     }
 
@@ -492,7 +504,7 @@ async function deleteCurrentFile() {
     const file = getCurrentFileRecord();
     if (!file) return;
 
-    if (isFileModalDirty() && !confirm('Delete this file and discard unsaved changes?')) {
+    if (!(await confirmDiscardFileModalChanges('Delete this file and discard your unsaved changes?'))) {
         return;
     }
 
@@ -520,7 +532,7 @@ async function deleteCurrentFile() {
             return;
         }
 
-        closeFileModal(true);
+        await closeFileModal(true);
         await refreshWorkspaceAfterFileSave();
     } catch (error) {
         console.error('Error deleting file:', error);
@@ -532,9 +544,12 @@ async function deleteCurrentFile() {
 }
 
 // Close file modal
-function closeFileModal(force = false) {
-    if (!force && !confirmDiscardFileModalChanges()) {
-        return false;
+async function closeFileModal(force = false) {
+    if (!force) {
+        const canDiscard = await confirmDiscardFileModalChanges();
+        if (!canDiscard) {
+            return false;
+        }
     }
 
     document.getElementById('file-modal').classList.add('hidden');
@@ -681,7 +696,7 @@ async function restoreVersion(version, buttonEl) {
             return;
         }
 
-        closeFileModal(true);
+        await closeFileModal(true);
         await loadProject();
         await loadVersions();
         setVersionsStatus(`Restored "${description}".`, 'success');
@@ -1119,7 +1134,7 @@ function handleFileUpload(file) {
     
     const maxSize = 5 * 1024 * 1024; // 5MB limit
     if (file.size > maxSize) {
-        alert('File too large. Max size is 5MB.');
+        showWorkspaceToast('File too large. Max size is 5MB.', 'error', 4200);
         return;
     }
     
@@ -1150,7 +1165,7 @@ function handleFileUpload(file) {
         };
         reader.readAsText(file);
     } else {
-        alert('Unsupported file type. Please upload images, text files, or code files.');
+        showWorkspaceToast('Unsupported file type. Please upload images, text files, or code files.', 'error', 4200);
     }
 }
 
@@ -1561,8 +1576,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // File modal controls
-    document.getElementById('modal-close').addEventListener('click', () => closeFileModal());
-    document.getElementById('file-modal-cancel').addEventListener('click', () => closeFileModal());
+    document.getElementById('modal-close').addEventListener('click', async () => await closeFileModal());
+    document.getElementById('file-modal-cancel').addEventListener('click', async () => await closeFileModal());
     document.getElementById('file-modal-rename').addEventListener('click', renameCurrentFile);
     document.getElementById('file-modal-delete').addEventListener('click', deleteCurrentFile);
     document.getElementById('file-modal-save').addEventListener('click', saveCurrentFile);
@@ -1591,9 +1606,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Close modals when clicking outside
-    document.getElementById('file-modal').addEventListener('click', (e) => {
+    document.getElementById('file-modal').addEventListener('click', async (e) => {
         if (e.target === document.getElementById('file-modal')) {
-            closeFileModal();
+            await closeFileModal();
         }
     });
     document.getElementById('file-action-modal').addEventListener('click', (e) => {
@@ -1607,14 +1622,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', async (e) => {
         if (e.key === 'Escape') {
             if (!document.getElementById('file-action-modal').classList.contains('hidden')) {
                 closeFileActionDialog();
                 return;
             }
             if (!document.getElementById('file-modal').classList.contains('hidden')) {
-                closeFileModal();
+                await closeFileModal();
             }
         }
     });
