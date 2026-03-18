@@ -287,8 +287,74 @@ class TestListVersionsAPI:
         version_by_description = {v['description']: v for v in data['versions']}
         assert version_by_description['Version 1']['entry_filename'] == 'index.html'
         assert version_by_description['Version 1']['has_files_snapshot'] == 1
+        assert version_by_description['Version 1']['file_count'] == 1
+        assert version_by_description['Version 1']['code_size'] == len('code1')
+        assert version_by_description['Version 1']['matches_live_state'] is False
         assert version_by_description['Version 2']['has_files_snapshot'] == 0
-    
+        assert version_by_description['Version 2']['entry_filename'] == 'sketch.js'
+        assert version_by_description['Version 2']['file_count'] == 1
+        assert version_by_description['Version 2']['code_size'] == len('code2')
+        assert version_by_description['Version 2']['matches_live_state'] is False
+
+    def test_list_versions_marks_live_project_checkpoint(self, client, auth_headers, project_factory, db_path):
+        """Listing versions should identify which save matches the current project state."""
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        live_files = {
+            'index.html': '<html><body>live</body></html>',
+            'main.js': 'console.log("live")',
+        }
+        old_files = {
+            'index.html': '<html><body>old</body></html>',
+            'main.js': 'console.log("old")',
+        }
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', (live_files['index.html'], project_id))
+        cursor.executemany(
+            'INSERT INTO project_files (project_id, filename, content) VALUES (?, ?, ?)',
+            [(project_id, filename, content) for filename, content in live_files.items()]
+        )
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            project_id,
+            old_files['index.html'],
+            'Old checkpoint',
+            json.dumps(old_files),
+            'index.html'
+        ))
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            project_id,
+            live_files['index.html'],
+            'Current checkpoint',
+            json.dumps(live_files),
+            'index.html'
+        ))
+        conn.commit()
+        conn.close()
+
+        response = client.get(
+            f'/api/projects/{project_id}/versions',
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        versions = response.get_json()['versions']
+        version_by_description = {v['description']: v for v in versions}
+
+        assert version_by_description['Current checkpoint']['matches_live_state'] is True
+        assert version_by_description['Current checkpoint']['file_count'] == 2
+        assert version_by_description['Current checkpoint']['entry_filename'] == 'index.html'
+        assert version_by_description['Old checkpoint']['matches_live_state'] is False
+        assert version_by_description['Old checkpoint']['file_count'] == 2
+
     def test_list_versions_wrong_project(self, client, auth_headers):
         """Test listing versions for non-existent project."""
         response = client.get(
