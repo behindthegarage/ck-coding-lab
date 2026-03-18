@@ -600,6 +600,68 @@
     box-shadow: none;
 }
 
+.file-action-modal-content {
+    max-width: 520px;
+}
+
+.file-action-message {
+    margin-top: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+}
+
+.file-action-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.file-action-input-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.file-action-input {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
+.file-action-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.file-action-dialog-actions {
+    justify-content: flex-end;
+}
+
+.file-action-dialog-actions .btn-small,
+.file-action-dialog-actions .btn-primary {
+    flex: 0 0 auto;
+    min-width: 120px;
+}
+
+.file-action-dialog-actions .btn-danger,
+.file-action-dialog-actions .file-modal-danger {
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #fecaca;
+}
+
+.file-action-dialog-actions .btn-danger:hover,
+.file-action-dialog-actions .file-modal-danger:hover {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.65);
+}
+
 /* ============================================
    VERSION HISTORY MODAL
    ============================================ */

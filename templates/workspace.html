@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace - Club Kinawa Coding Lab</title>
     <link rel="stylesheet" href="/lab/static/css/style.css?v=31">
-    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=32">
+    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=33">
     <link rel="stylesheet" href="/lab/static/css/sidebar.css?v=32">
     <!-- p5.js for preview -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
@@ -147,6 +147,28 @@
         </div>
     </div>
 
+    <!-- File Action Modal -->
+    <div id="file-action-modal" class="modal hidden">
+        <div class="modal-content file-action-modal-content">
+            <div class="modal-header">
+                <div>
+                    <h3 id="file-action-title">File action</h3>
+                    <p id="file-action-message" class="file-action-message"></p>
+                </div>
+                <button class="modal-close" id="file-action-close">×</button>
+            </div>
+            <div id="file-action-input-group" class="file-action-input-group hidden">
+                <label for="file-action-input" id="file-action-input-label" class="file-action-input-label">Filename</label>
+                <input id="file-action-input" class="file-action-input" type="text" autocomplete="off" spellcheck="false">
+            </div>
+            <div id="file-action-error" class="file-modal-status error hidden"></div>
+            <div class="modal-actions file-action-dialog-actions">
+                <button id="file-action-cancel" class="btn-small" type="button">Cancel</button>
+                <button id="file-action-confirm" class="btn-primary" type="button">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Version History Modal -->
     <div id="versions-modal" class="modal hidden">
         <div class="modal-content modal-large versions-modal-content">
@@ -164,8 +186,8 @@
         </div>
     </div>
     
-    <script src="/lab/static/js/auth.js?v=4"></script>
+    <script src="/lab/static/js/auth.js?v=5"></script>
     <script src="/lab/static/js/sandbox.js?v=26"></script>
-    <script src="/lab/static/js/workspace.js?v=36"></script>
+    <script src="/lab/static/js/workspace.js?v=37"></script>
 </body>
 </html>

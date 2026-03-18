@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 36 - Three-pane workspace layout
+// Version 37 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -19,6 +19,7 @@ let pendingUpload = null;
 let currentFileId = null;
 let currentFileOriginalContent = '';
 let fileModalSaving = false;
+let fileActionDialogState = null;
 let versions = [];
 let sidebarCollapsed = false;
 let previewCollapsed = false;
@@ -138,6 +139,128 @@ function isFileModalDirty() {
 
 function getCurrentFileRecord() {
     return projectFiles.find(file => String(file.id) === String(currentFileId)) || null;
+}
+
+function validateFilenameInput(filename, { existingId = null } = {}) {
+    const value = (filename || '').trim();
+
+    if (!value) {
+        return 'Filename is required.';
+    }
+
+    if (value.includes('/') || value.includes('\\') || value.includes('..')) {
+        return 'Filename cannot include folders or ..';
+    }
+
+    if (projectFiles.some(file => String(file.id) !== String(existingId) && file.filename === value)) {
+        return `A file named ${value} already exists.`;
+    }
+
+    return '';
+}
+
+function closeFileActionDialog(result = { confirmed: false, value: '' }) {
+    const modal = document.getElementById('file-action-modal');
+    const error = document.getElementById('file-action-error');
+    const inputGroup = document.getElementById('file-action-input-group');
+    const input = document.getElementById('file-action-input');
+    const resolver = fileActionDialogState?.resolve;
+
+    fileActionDialogState = null;
+    modal.classList.add('hidden');
+    error.textContent = '';
+    error.classList.add('hidden');
+    inputGroup.classList.add('hidden');
+    input.value = '';
+
+    if (resolver) {
+        resolver(result);
+    }
+}
+
+function submitFileActionDialog() {
+    if (!fileActionDialogState) return;
+
+    const error = document.getElementById('file-action-error');
+    const input = document.getElementById('file-action-input');
+    const needsInput = fileActionDialogState.needsInput;
+    const value = needsInput ? input.value.trim() : '';
+
+    error.textContent = '';
+    error.classList.add('hidden');
+
+    if (needsInput && typeof fileActionDialogState.validate === 'function') {
+        const validationError = fileActionDialogState.validate(value);
+        if (validationError) {
+            error.textContent = validationError;
+            error.classList.remove('hidden');
+            input.focus();
+            input.select();
+            return;
+        }
+    }
+
+    closeFileActionDialog({ confirmed: true, value });
+}
+
+function showFileActionDialog({
+    title,
+    message,
+    confirmLabel = 'Confirm',
+    confirmClass = 'btn-primary',
+    initialValue = '',
+    inputLabel = 'Filename',
+    placeholder = '',
+    needsInput = false,
+    validate = null
+}) {
+    if (fileActionDialogState) {
+        closeFileActionDialog();
+    }
+
+    const modal = document.getElementById('file-action-modal');
+    const titleEl = document.getElementById('file-action-title');
+    const messageEl = document.getElementById('file-action-message');
+    const inputGroup = document.getElementById('file-action-input-group');
+    const inputLabelEl = document.getElementById('file-action-input-label');
+    const inputEl = document.getElementById('file-action-input');
+    const confirmBtn = document.getElementById('file-action-confirm');
+    const error = document.getElementById('file-action-error');
+
+    titleEl.textContent = title || 'File action';
+    messageEl.textContent = message || '';
+    inputLabelEl.textContent = inputLabel;
+    inputEl.value = initialValue;
+    inputEl.placeholder = placeholder;
+    confirmBtn.textContent = confirmLabel;
+    confirmBtn.className = confirmClass;
+    error.textContent = '';
+    error.classList.add('hidden');
+
+    if (needsInput) {
+        inputGroup.classList.remove('hidden');
+    } else {
+        inputGroup.classList.add('hidden');
+    }
+
+    modal.classList.remove('hidden');
+
+    return new Promise(resolve => {
+        fileActionDialogState = {
+            resolve,
+            needsInput,
+            validate
+        };
+
+        if (needsInput) {
+            setTimeout(() => {
+                inputEl.focus();
+                inputEl.select();
+            }, 0);
+        } else {
+            setTimeout(() => confirmBtn.focus(), 0);
+        }
+    });
 }
 
 function updateFileModalSaveState() {
@@ -275,26 +398,25 @@ async function renameCurrentFile() {
         return;
     }
 
-    const nextFilenameInput = prompt('Rename file:', file.filename);
-    if (nextFilenameInput === null) return;
+    const action = await showFileActionDialog({
+        title: 'Rename file',
+        message: `Choose a new name for ${file.filename}.`,
+        confirmLabel: 'Rename file',
+        confirmClass: 'btn-primary',
+        initialValue: file.filename,
+        inputLabel: 'New filename',
+        placeholder: file.filename,
+        needsInput: true,
+        validate: (value) => {
+            if (value === file.filename) return '';
+            return validateFilenameInput(value, { existingId: currentFileId });
+        }
+    });
 
-    const nextFilename = nextFilenameInput.trim();
-    if (!nextFilename) {
-        alert('Filename is required.');
-        return;
-    }
+    if (!action.confirmed) return;
 
-    if (nextFilename.includes('/') || nextFilename.includes('\\') || nextFilename.includes('..')) {
-        alert('Filename cannot include folders or ..');
-        return;
-    }
-
+    const nextFilename = action.value;
     if (nextFilename === file.filename) {
-        return;
-    }
-
-    if (projectFiles.some(item => String(item.id) !== String(currentFileId) && item.filename === nextFilename)) {
-        alert(`A file named ${nextFilename} already exists.`);
         return;
     }
 
@@ -337,8 +459,15 @@ async function deleteCurrentFile() {
         return;
     }
 
-    const confirmed = confirm(`Delete ${file.filename}?\n\nYou can restore it later from Version History if you saved a version first.`);
-    if (!confirmed) return;
+    const action = await showFileActionDialog({
+        title: 'Delete file',
+        message: `Delete ${file.filename}? If you saved a version first, you can restore it later from Version History.`,
+        confirmLabel: 'Delete file',
+        confirmClass: 'btn-small file-modal-danger',
+        needsInput: false
+    });
+
+    if (!action.confirmed) return;
 
     fileModalSaving = true;
     setFileModalStatus('Deleting file...', 'info');
@@ -356,7 +485,6 @@ async function deleteCurrentFile() {
 
         closeFileModal(true);
         await refreshWorkspaceAfterFileSave();
-        alert(`Deleted ${file.filename}.`);
     } catch (error) {
         console.error('Error deleting file:', error);
         setFileModalStatus(error.message || 'Failed to delete file.', 'error');
@@ -981,25 +1109,21 @@ function handleFileUpload(file) {
 }
 
 async function createNewFile() {
-    const filenameInput = prompt('Enter filename (e.g., helper.js, styles.css):');
-    if (filenameInput === null) return;
+    const action = await showFileActionDialog({
+        title: 'Create new file',
+        message: 'Add a new file to this project. You can start with something like helper.js, styles.css, or level2.html.',
+        confirmLabel: 'Create file',
+        confirmClass: 'btn-primary',
+        initialValue: '',
+        inputLabel: 'Filename',
+        placeholder: 'helper.js',
+        needsInput: true,
+        validate: (value) => validateFilenameInput(value)
+    });
 
-    const filename = filenameInput.trim();
-    if (!filename) {
-        alert('Filename is required.');
-        return;
-    }
+    if (!action.confirmed) return;
 
-    if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
-        alert('Filename cannot include folders or ..');
-        return;
-    }
-
-    if (projectFiles.some(file => file.filename === filename)) {
-        alert(`A file named ${filename} already exists.`);
-        return;
-    }
-
+    const filename = action.value;
     const data = await apiRequest(`/projects/${projectId}/files`, {
         method: 'POST',
         body: { filename, content: '' }
@@ -1398,11 +1522,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('versions-modal-close').addEventListener('click', closeVersionsModal);
+
+    // File action modal controls
+    document.getElementById('file-action-close').addEventListener('click', () => closeFileActionDialog());
+    document.getElementById('file-action-cancel').addEventListener('click', () => closeFileActionDialog());
+    document.getElementById('file-action-confirm').addEventListener('click', submitFileActionDialog);
+    document.getElementById('file-action-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitFileActionDialog();
+        }
+    });
     
     // Close modals when clicking outside
     document.getElementById('file-modal').addEventListener('click', (e) => {
         if (e.target === document.getElementById('file-modal')) {
             closeFileModal();
+        }
+    });
+    document.getElementById('file-action-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('file-action-modal')) {
+            closeFileActionDialog();
         }
     });
     document.getElementById('versions-modal').addEventListener('click', (e) => {
@@ -1412,8 +1552,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !document.getElementById('file-modal').classList.contains('hidden')) {
-            closeFileModal();
+        if (e.key === 'Escape') {
+            if (!document.getElementById('file-action-modal').classList.contains('hidden')) {
+                closeFileActionDialog();
+                return;
+            }
+            if (!document.getElementById('file-modal').classList.contains('hidden')) {
+                closeFileModal();
+            }
         }
     });
 
