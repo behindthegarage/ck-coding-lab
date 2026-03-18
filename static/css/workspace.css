@@ -62,6 +62,45 @@
     margin: 0;
 }
 
+.sidebar-search-wrap {
+    position: relative;
+    margin-top: 0.75rem;
+}
+
+.sidebar-search-input {
+    width: 100%;
+    padding: 0.65rem 2rem 0.65rem 0.8rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-light);
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.sidebar-search-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
+}
+
+.sidebar-search-clear {
+    position: absolute;
+    top: 50%;
+    right: 0.45rem;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.2rem;
+}
+
+.sidebar-search-clear:hover {
+    color: var(--text);
+}
+
 .file-tree {
     flex: 1;
     overflow-y: auto;

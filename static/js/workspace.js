@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 38 - Three-pane workspace layout
+// Version 40 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -22,6 +22,7 @@ let fileModalSaving = false;
 let fileActionDialogState = null;
 let workspaceToastTimer = null;
 let versions = [];
+let fileSearchQuery = '';
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let isMobile = window.innerWidth < 768;
@@ -58,18 +59,41 @@ async function loadProject() {
     }
 }
 
+function updateFileSearchUI() {
+    const input = document.getElementById('file-search-input');
+    const clearBtn = document.getElementById('file-search-clear');
+    if (!input || !clearBtn) return;
+
+    input.value = fileSearchQuery;
+    clearBtn.classList.toggle('hidden', !fileSearchQuery);
+}
+
+function getFilteredProjectFiles() {
+    const query = fileSearchQuery.trim().toLowerCase();
+    if (!query) return projectFiles;
+    return projectFiles.filter(file => (file.filename || '').toLowerCase().includes(query));
+}
+
 // Load file tree in sidebar
 function loadFileTree() {
     const container = document.getElementById('file-tree');
+    const filteredFiles = getFilteredProjectFiles();
+    updateFileSearchUI();
     
     if (projectFiles.length === 0) {
         container.innerHTML = '<div class="file-loading">No files yet</div>';
         return;
     }
+
+    if (filteredFiles.length === 0) {
+        const safeQuery = escapeHtml(fileSearchQuery.trim());
+        container.innerHTML = `<div class="file-loading">No files match “${safeQuery}”.</div>`;
+        return;
+    }
     
     container.innerHTML = '';
     
-    projectFiles.forEach(file => {
+    filteredFiles.forEach(file => {
         const fileEl = document.createElement('div');
         fileEl.className = 'file-item';
         fileEl.dataset.fileId = file.id;
@@ -116,6 +140,11 @@ function loadFileTree() {
         
         container.appendChild(fileEl);
     });
+}
+
+function setFileSearchQuery(value = '') {
+    fileSearchQuery = value.trimStart();
+    loadFileTree();
 }
 
 function setFileModalStatus(message = '', type = 'info') {
@@ -1462,6 +1491,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sidebar toggle
     document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
+
+    // File search
+    document.getElementById('file-search-input').addEventListener('input', (e) => {
+        setFileSearchQuery(e.target.value);
+    });
+    document.getElementById('file-search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setFileSearchQuery('');
+            e.target.blur();
+        }
+    });
+    document.getElementById('file-search-clear').addEventListener('click', () => {
+        setFileSearchQuery('');
+        document.getElementById('file-search-input').focus();
+    });
 
     // Preview toggle (desktop) / close (mobile)
     document.getElementById('preview-toggle').addEventListener('click', togglePreview);
