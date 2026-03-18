@@ -16,6 +16,7 @@ Environment="CKCL_DB_PATH=/home/openclaw/ck-coding-lab/ckcl.db"
 Environment="SECRET_KEY=change-this-in-production"
 Environment="OPENCLAW_GATEWAY_URL=http://localhost:18789"
 Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-/home/openclaw/ck-coding-lab/ck-coding-lab.env
 
 # Create gunicorn log directory
 ExecStartPre=/bin/mkdir -p /home/openclaw/ck-coding-lab/logs
