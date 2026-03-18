@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 43 - Three-pane workspace layout
+// Version 44 - Three-pane workspace layout with keyboard shortcuts
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -29,6 +29,210 @@ let previewCollapsed = false;
 let latestAssistantChanges = {};
 let isMobile = window.innerWidth < 768;
 let isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
+
+const PRIMARY_SHORTCUT_LABEL = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '') ? '⌘' : 'Ctrl';
+
+function isTextInputTarget(target) {
+    if (!target) return false;
+    return Boolean(target.closest('textarea, input, select, [contenteditable="true"], [contenteditable=""]'));
+}
+
+function hasOpenWorkspaceModal() {
+    return [
+        'file-modal',
+        'file-action-modal',
+        'versions-modal',
+        'shortcuts-modal'
+    ].some((id) => {
+        const element = document.getElementById(id);
+        return element && !element.classList.contains('hidden');
+    });
+}
+
+function ensureSidebarVisible() {
+    const sidebar = document.getElementById('project-sidebar');
+    const workspace = document.getElementById('workspace-container');
+    if (!sidebar || !workspace) return;
+
+    sidebarCollapsed = false;
+
+    if (isMobile || isTablet) {
+        sidebar.classList.add('open');
+        workspace.classList.add('sidebar-open');
+    } else {
+        sidebar.classList.remove('collapsed');
+    }
+
+    localStorage.setItem('sidebarCollapsed', 'false');
+}
+
+function ensurePreviewVisible() {
+    const preview = document.getElementById('preview-pane');
+    const showBtn = document.getElementById('show-preview-btn');
+    if (!preview) return;
+
+    previewCollapsed = false;
+
+    if (isMobile) {
+        preview.classList.add('open');
+        if (showBtn) showBtn.classList.add('hidden');
+    } else {
+        preview.classList.remove('collapsed');
+    }
+
+    localStorage.setItem('previewCollapsed', 'false');
+}
+
+function focusFileSearchShortcut({ selectText = true, showToast = true } = {}) {
+    ensureSidebarVisible();
+    const input = document.getElementById('file-search-input');
+    if (!input) return;
+
+    input.focus();
+    if (selectText && typeof input.select === 'function') {
+        input.select();
+    }
+
+    if (showToast) {
+        showWorkspaceToast('Quick open ready. Type a file name, then press Enter.', 'info');
+    }
+}
+
+function focusChatShortcut({ showToast = true } = {}) {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+
+    input.focus();
+    const cursor = input.value.length;
+    if (typeof input.setSelectionRange === 'function') {
+        input.setSelectionRange(cursor, cursor);
+    }
+
+    if (showToast) {
+        showWorkspaceToast('Chat ready.', 'info');
+    }
+}
+
+function focusPreviewShortcut({ showToast = true } = {}) {
+    ensurePreviewVisible();
+    const target = document.getElementById('run-btn') || document.getElementById('refresh-preview-btn');
+    if (!target) return;
+
+    target.focus();
+    if (showToast) {
+        showWorkspaceToast('Preview controls focused.', 'info');
+    }
+}
+
+function applyShortcutHints() {
+    const searchInput = document.getElementById('file-search-input');
+    const searchHint = document.querySelector('.sidebar-shortcut-hint');
+    const saveVersionBtn = document.getElementById('save-version-btn');
+
+    if (searchInput) {
+        searchInput.placeholder = 'Quick open files...';
+        searchInput.title = `Quick open files (${PRIMARY_SHORTCUT_LABEL}+P)`;
+    }
+
+    if (searchHint) {
+        searchHint.textContent = `${PRIMARY_SHORTCUT_LABEL}+P to search • Enter to open`;
+    }
+
+    if (saveVersionBtn) {
+        saveVersionBtn.title = `Save version (${PRIMARY_SHORTCUT_LABEL}+Shift+S)`;
+    }
+}
+
+function openShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    const closeBtn = document.getElementById('shortcuts-modal-close');
+    if (closeBtn) {
+        setTimeout(() => closeBtn.focus(), 0);
+    }
+}
+
+function closeShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+async function handleGlobalWorkspaceShortcuts(e) {
+    const key = (e.key || '').toLowerCase();
+    const hasPrimaryModifier = e.ctrlKey || e.metaKey;
+    const textInputActive = isTextInputTarget(e.target);
+
+    if (e.key === 'Escape') {
+        if (!document.getElementById('shortcuts-modal').classList.contains('hidden')) {
+            closeShortcutsModal();
+            return;
+        }
+        if (!document.getElementById('file-action-modal').classList.contains('hidden')) {
+            closeFileActionDialog();
+            return;
+        }
+        if (activeFileMenuId !== null) {
+            closeAllFileMenus();
+            return;
+        }
+        if (!document.getElementById('versions-modal').classList.contains('hidden')) {
+            closeVersionsModal();
+            return;
+        }
+        if (!document.getElementById('file-modal').classList.contains('hidden')) {
+            await closeFileModal();
+        }
+        return;
+    }
+
+    if (e.repeat) return;
+
+    if (hasPrimaryModifier && !e.shiftKey && !e.altKey && key === 'p' && !hasOpenWorkspaceModal()) {
+        e.preventDefault();
+        focusFileSearchShortcut();
+        return;
+    }
+
+    if (hasPrimaryModifier && e.shiftKey && !e.altKey && key === 's' && !hasOpenWorkspaceModal()) {
+        e.preventDefault();
+        await saveProjectVersion();
+        return;
+    }
+
+    if (!textInputActive && !hasPrimaryModifier && !e.ctrlKey && !e.metaKey) {
+        if (!e.shiftKey && e.altKey && key === '1' && !hasOpenWorkspaceModal()) {
+            e.preventDefault();
+            focusFileSearchShortcut({ selectText: true, showToast: false });
+            return;
+        }
+
+        if (!e.shiftKey && e.altKey && key === '2' && !hasOpenWorkspaceModal()) {
+            e.preventDefault();
+            focusChatShortcut({ showToast: false });
+            return;
+        }
+
+        if (!e.shiftKey && e.altKey && key === '3' && !hasOpenWorkspaceModal()) {
+            e.preventDefault();
+            focusPreviewShortcut({ showToast: false });
+            return;
+        }
+
+        if (e.shiftKey && key === '?') {
+            e.preventDefault();
+            if (document.getElementById('shortcuts-modal').classList.contains('hidden')) {
+                openShortcutsModal();
+            } else {
+                closeShortcutsModal();
+            }
+        }
+    }
+}
 
 // Load project data
 async function loadProject() {
@@ -1684,11 +1888,24 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('file-search-input').addEventListener('input', (e) => {
         setFileSearchQuery(e.target.value);
     });
-    document.getElementById('file-search-input').addEventListener('keydown', (e) => {
+    document.getElementById('file-search-input').addEventListener('keydown', async (e) => {
         if (e.key === 'Escape') {
             e.preventDefault();
             setFileSearchQuery('');
             e.target.blur();
+            return;
+        }
+
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const [firstFile] = getFilteredProjectFiles();
+            if (!firstFile) {
+                showWorkspaceToast('No matching files to open yet.', 'info');
+                return;
+            }
+
+            closeAllFileMenus();
+            await viewFile(firstFile.id, firstFile.filename);
         }
     });
     document.getElementById('file-search-clear').addEventListener('click', () => {
@@ -1776,6 +1993,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save version button
     document.getElementById('save-version-btn').addEventListener('click', saveProjectVersion);
+    document.getElementById('shortcuts-help-btn').addEventListener('click', openShortcutsModal);
 
     // Logout button
     document.getElementById('logout-btn').addEventListener('click', () => {
@@ -1817,6 +2035,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('versions-modal-close').addEventListener('click', closeVersionsModal);
+    document.getElementById('shortcuts-modal-close').addEventListener('click', closeShortcutsModal);
 
     // File action modal controls
     document.getElementById('file-action-close').addEventListener('click', () => closeFileActionDialog());
@@ -1840,28 +2059,20 @@ document.addEventListener('DOMContentLoaded', () => {
             closeFileActionDialog();
         }
     });
+    document.getElementById('shortcuts-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('shortcuts-modal')) {
+            closeShortcutsModal();
+        }
+    });
     document.getElementById('versions-modal').addEventListener('click', (e) => {
         if (e.target === document.getElementById('versions-modal')) {
             closeVersionsModal();
         }
     });
 
-    document.addEventListener('keydown', async (e) => {
-        if (e.key === 'Escape') {
-            if (!document.getElementById('file-action-modal').classList.contains('hidden')) {
-                closeFileActionDialog();
-                return;
-            }
-            if (activeFileMenuId !== null) {
-                closeAllFileMenus();
-                return;
-            }
-            if (!document.getElementById('file-modal').classList.contains('hidden')) {
-                await closeFileModal();
-            }
-        }
-    });
+    document.addEventListener('keydown', handleGlobalWorkspaceShortcuts);
 
+    applyShortcutHints();
     updateFileModalSaveState();
     
     // New file button

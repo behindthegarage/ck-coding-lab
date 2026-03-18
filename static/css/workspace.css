@@ -101,6 +101,13 @@
     color: var(--text);
 }
 
+.sidebar-shortcut-hint {
+    margin-top: 0.45rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
 .sidebar-sort-btn {
     width: 100%;
     margin-top: 0.65rem;
@@ -1053,6 +1060,63 @@
 }
 
 /* ============================================
+   SHORTCUTS MODAL
+   ============================================ */
+
+.shortcuts-modal-content {
+    max-width: 680px;
+}
+
+.shortcuts-modal-subtitle {
+    margin-top: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.shortcuts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-top: 1rem;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(148, 163, 184, 0.07);
+}
+
+.shortcut-item strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.shortcut-item p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.shortcut-key {
+    flex: 0 0 auto;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-bottom-width: 3px;
+    border-radius: 10px;
+    padding: 0.45rem 0.7rem;
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--text);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* ============================================
    VERSION HISTORY MODAL
    ============================================ */
 
@@ -1798,4 +1862,15 @@
     padding: 0.5rem;
     background: rgba(99, 102, 241, 0.1);
     border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+    .shortcut-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .shortcut-key {
+        white-space: normal;
+    }
 }

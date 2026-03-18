@@ -23,8 +23,9 @@
         </div>
         
         <div class="user-menu">
-            <button id="version-history-btn" class="btn-small">Version History</button>
-            <button id="save-version-btn" class="btn-small">Save Version</button>
+            <button id="version-history-btn" class="btn-small" title="Open version history">Version History</button>
+            <button id="save-version-btn" class="btn-small" title="Save version (Ctrl/Cmd+Shift+S)">Save Version</button>
+            <button id="shortcuts-help-btn" class="btn-small" type="button" title="Keyboard shortcuts (?)">Shortcuts</button>
             <button id="logout-btn" class="btn-small">Log Out</button>
         </div>
     </header>
@@ -35,9 +36,10 @@
             <div class="sidebar-header">
                 <h3>📁 Files</h3>
                 <div class="sidebar-search-wrap">
-                    <input id="file-search-input" class="sidebar-search-input" type="text" placeholder="Search files..." autocomplete="off" spellcheck="false">
+                    <input id="file-search-input" class="sidebar-search-input" type="text" placeholder="Quick open files..." autocomplete="off" spellcheck="false" title="Quick open files (Ctrl/Cmd+P)">
                     <button id="file-search-clear" class="sidebar-search-clear hidden" type="button" aria-label="Clear file search">×</button>
                 </div>
+                <div class="sidebar-shortcut-hint">Ctrl/Cmd + P to search • Enter to open</div>
                 <button id="file-sort-btn" class="sidebar-sort-btn" type="button">Sort: Smart</button>
             </div>
             
@@ -197,6 +199,56 @@
     </div>
 
     <div id="workspace-toast" class="workspace-toast hidden" role="status" aria-live="polite"></div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content shortcuts-modal-content">
+            <div class="modal-header">
+                <div>
+                    <h3>Keyboard shortcuts</h3>
+                    <p class="shortcuts-modal-subtitle">A few low-conflict shortcuts to move around the workspace faster.</p>
+                </div>
+                <button class="modal-close" id="shortcuts-modal-close">×</button>
+            </div>
+            <div class="shortcuts-list">
+                <div class="shortcut-item">
+                    <div>
+                        <strong>Quick open files</strong>
+                        <p>Focus the file search, then press Enter to open the top match.</p>
+                    </div>
+                    <span class="shortcut-key">Ctrl/Cmd + P</span>
+                </div>
+                <div class="shortcut-item">
+                    <div>
+                        <strong>Save version</strong>
+                        <p>Create a version snapshot without leaving the keyboard.</p>
+                    </div>
+                    <span class="shortcut-key">Ctrl/Cmd + Shift + S</span>
+                </div>
+                <div class="shortcut-item">
+                    <div>
+                        <strong>Focus files, chat, or preview</strong>
+                        <p>Jump between the main workspace areas.</p>
+                    </div>
+                    <span class="shortcut-key">Alt + 1 / 2 / 3</span>
+                </div>
+                <div class="shortcut-item">
+                    <div>
+                        <strong>Show shortcuts</strong>
+                        <p>Open this list when you need a reminder.</p>
+                    </div>
+                    <span class="shortcut-key">?</span>
+                </div>
+                <div class="shortcut-item">
+                    <div>
+                        <strong>Close dialogs</strong>
+                        <p>Dismiss menus and modals, or clear file search when it is focused.</p>
+                    </div>
+                    <span class="shortcut-key">Esc</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Version History Modal -->
     <div id="versions-modal" class="modal hidden">
