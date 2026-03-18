@@ -246,6 +246,15 @@
     flex: 1;
     overflow: hidden;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.preview-stage {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 #preview-container {
@@ -265,6 +274,183 @@
 #preview-container canvas {
     max-width: 100%;
     max-height: 100%;
+}
+
+.preview-debug-panel {
+    border-top: 1px solid var(--border);
+    background: rgba(15, 23, 42, 0.9);
+    flex-shrink: 0;
+}
+
+.preview-debug-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+}
+
+.preview-debug-toggle:hover {
+    background: rgba(148, 163, 184, 0.08);
+}
+
+.preview-debug-toggle-label {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.preview-debug-summary {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-debug-count {
+    min-width: 1.5rem;
+    padding: 0.125rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    color: #fca5a5;
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.preview-debug-panel.has-warnings:not(.has-errors) .preview-debug-count {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.28);
+    color: #fcd34d;
+}
+
+.preview-debug-panel.has-errors .preview-debug-toggle-label {
+    color: #fca5a5;
+}
+
+.preview-debug-panel.has-warnings:not(.has-errors) .preview-debug-toggle-label {
+    color: #fcd34d;
+}
+
+.preview-debug-body {
+    border-top: 1px solid var(--border);
+}
+
+.preview-debug-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+}
+
+.preview-debug-toolbar-label {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.preview-debug-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 220px;
+    overflow: auto;
+    padding: 0 1rem 1rem;
+}
+
+.preview-debug-empty {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    padding: 0.25rem 0;
+}
+
+.preview-debug-entry {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid rgba(148, 163, 184, 0.4);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+}
+
+.preview-debug-entry.level-error {
+    border-left-color: #ef4444;
+}
+
+.preview-debug-entry.level-warn {
+    border-left-color: #f59e0b;
+}
+
+.preview-debug-entry.level-info {
+    border-left-color: #38bdf8;
+}
+
+.preview-debug-entry-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.preview-debug-entry-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.preview-debug-entry-source {
+    font-weight: 600;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.preview-debug-entry-repeat {
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    font-size: 0.6875rem;
+}
+
+.preview-debug-entry-time {
+    white-space: nowrap;
+}
+
+.preview-debug-message {
+    color: var(--text);
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.preview-debug-context {
+    margin-top: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+    .preview-debug-list {
+        max-height: 180px;
+    }
 }
 
 /* ============================================

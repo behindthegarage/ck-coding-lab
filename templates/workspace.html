@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace - Club Kinawa Coding Lab</title>
     <link rel="stylesheet" href="/lab/static/css/style.css?v=31">
-    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=37">
+    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=38">
     <link rel="stylesheet" href="/lab/static/css/sidebar.css?v=32">
     <!-- p5.js for preview -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
@@ -100,9 +100,27 @@
             </div>
             
             <div class="preview-content">
-                <div id="preview-container">
-                    <p class="preview-placeholder">Your project preview will appear here.</p>
+                <div class="preview-stage">
+                    <div id="preview-container">
+                        <p class="preview-placeholder">Your project preview will appear here.</p>
+                    </div>
                 </div>
+                <section id="preview-debug-panel" class="preview-debug-panel">
+                    <button id="preview-debug-toggle" class="preview-debug-toggle" type="button" aria-expanded="false">
+                        <span class="preview-debug-toggle-label">🐞 Debug</span>
+                        <span id="preview-debug-summary" class="preview-debug-summary">Watching runtime errors and console.error.</span>
+                        <span id="preview-debug-count" class="preview-debug-count hidden">0</span>
+                    </button>
+                    <div id="preview-debug-body" class="preview-debug-body hidden">
+                        <div class="preview-debug-toolbar">
+                            <span class="preview-debug-toolbar-label">Latest preview signals</span>
+                            <button id="preview-debug-clear" class="btn-small" type="button">Clear</button>
+                        </div>
+                        <div id="preview-debug-list" class="preview-debug-list" role="log" aria-live="polite">
+                            <div class="preview-debug-empty">No preview issues yet.</div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </aside>
         
@@ -194,9 +212,9 @@
     </div>
     
     <script src="/lab/static/js/auth.js?v=5"></script>
-    <script src="/lab/static/js/sandbox.js?v=26"></script>
+    <script src="/lab/static/js/sandbox.js?v=27"></script>
     <script src="/lab/static/js/workspace.js?v=43"></script>
-    <script src="/lab/static/js/workspace-preview.js?v=1"></script>
+    <script src="/lab/static/js/workspace-preview.js?v=2"></script>
     <script src="/lab/static/js/workspace-versions.js?v=1"></script>
 </body>
 </html>
