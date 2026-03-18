@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 37 - Three-pane workspace layout
+// Version 38 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -20,6 +20,7 @@ let currentFileId = null;
 let currentFileOriginalContent = '';
 let fileModalSaving = false;
 let fileActionDialogState = null;
+let workspaceToastTimer = null;
 let versions = [];
 let sidebarCollapsed = false;
 let previewCollapsed = false;
@@ -203,6 +204,24 @@ function submitFileActionDialog() {
     closeFileActionDialog({ confirmed: true, value });
 }
 
+function showWorkspaceToast(message, type = 'info', durationMs = 3200) {
+    const toast = document.getElementById('workspace-toast');
+    if (!toast || !message) return;
+
+    if (workspaceToastTimer) {
+        clearTimeout(workspaceToastTimer);
+    }
+
+    toast.textContent = message;
+    toast.className = `workspace-toast ${type}`;
+
+    workspaceToastTimer = setTimeout(() => {
+        toast.textContent = '';
+        toast.className = 'workspace-toast hidden';
+        workspaceToastTimer = null;
+    }, durationMs);
+}
+
 function showFileActionDialog({
     title,
     message,
@@ -261,6 +280,24 @@ function showFileActionDialog({
             setTimeout(() => confirmBtn.focus(), 0);
         }
     });
+}
+
+function showWorkspaceToast(message, type = 'info', durationMs = 3200) {
+    const toast = document.getElementById('workspace-toast');
+    if (!toast) return;
+
+    if (workspaceToastTimer) {
+        clearTimeout(workspaceToastTimer);
+    }
+
+    toast.textContent = message;
+    toast.className = `workspace-toast ${type}`;
+
+    workspaceToastTimer = setTimeout(() => {
+        toast.textContent = '';
+        toast.className = 'workspace-toast hidden';
+        workspaceToastTimer = null;
+    }, durationMs);
 }
 
 function updateFileModalSaveState() {
@@ -617,8 +654,14 @@ async function restoreVersion(version, buttonEl) {
     if (!version) return;
 
     const description = getVersionDescription(version);
-    const confirmed = confirm(`Restore "${description}" from ${formatVersionTimestamp(version.created_at)}?\n\nThis will replace the project's current files with that saved version.`);
-    if (!confirmed) return;
+    const action = await showFileActionDialog({
+        title: 'Restore saved version',
+        message: `Restore "${description}" from ${formatVersionTimestamp(version.created_at)}? This will replace the project's current files with that saved version.`,
+        confirmLabel: 'Restore version',
+        confirmClass: 'btn-primary',
+        needsInput: false
+    });
+    if (!action.confirmed) return;
 
     const originalLabel = buttonEl ? buttonEl.textContent : '';
     if (buttonEl) {
@@ -642,9 +685,12 @@ async function restoreVersion(version, buttonEl) {
         await loadProject();
         await loadVersions();
         setVersionsStatus(`Restored "${description}".`, 'success');
+        showWorkspaceToast(`Restored "${description}".`, 'success');
     } catch (error) {
         console.error('Error restoring version:', error);
-        setVersionsStatus(error.message || 'Failed to restore that version.', 'error');
+        const message = error.message || 'Failed to restore that version.';
+        setVersionsStatus(message, 'error');
+        showWorkspaceToast(message, 'error', 4200);
     } finally {
         if (buttonEl) {
             buttonEl.disabled = false;
@@ -1130,7 +1176,7 @@ async function createNewFile() {
     });
 
     if (!data || !data.success) {
-        alert(data?.error || 'Failed to create file.');
+        showWorkspaceToast(data?.error || 'Failed to create file.', 'error');
         return;
     }
 
@@ -1467,12 +1513,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save version button
     document.getElementById('save-version-btn').addEventListener('click', async () => {
-        const description = prompt('Version description (optional):');
-        if (description === null) return;
+        const action = await showFileActionDialog({
+            title: 'Save version',
+            message: 'Save the current project state so you can restore it later. A short description helps future-you.',
+            confirmLabel: 'Save version',
+            confirmClass: 'btn-primary',
+            initialValue: '',
+            inputLabel: 'Version description (optional)',
+            placeholder: 'Before adding enemies',
+            needsInput: true,
+            validate: () => ''
+        });
+        if (!action.confirmed) return;
 
         const data = await apiRequest(`/projects/${projectId}/versions`, {
             method: 'POST',
-            body: { description }
+            body: { description: action.value }
         });
 
         if (data && data.success) {
@@ -1480,13 +1536,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 await loadVersions();
                 setVersionsStatus('Saved a new version.', 'success');
             }
-            alert('Version saved!');
+            showWorkspaceToast('Version saved.', 'success');
         } else {
             const errorMessage = data?.error || 'Failed to save version';
             if (!document.getElementById('versions-modal').classList.contains('hidden')) {
                 setVersionsStatus(errorMessage, 'error');
             }
-            alert(errorMessage);
+            showWorkspaceToast(errorMessage, 'error', 4200);
         }
     });
 
