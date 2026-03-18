@@ -870,6 +870,41 @@ function handleFileUpload(file) {
     }
 }
 
+async function createNewFile() {
+    const filenameInput = prompt('Enter filename (e.g., helper.js, styles.css):');
+    if (filenameInput === null) return;
+
+    const filename = filenameInput.trim();
+    if (!filename) {
+        alert('Filename is required.');
+        return;
+    }
+
+    if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+        alert('Filename cannot include folders or ..');
+        return;
+    }
+
+    if (projectFiles.some(file => file.filename === filename)) {
+        alert(`A file named ${filename} already exists.`);
+        return;
+    }
+
+    const data = await apiRequest(`/projects/${projectId}/files`, {
+        method: 'POST',
+        body: { filename, content: '' }
+    });
+
+    if (!data || !data.success) {
+        alert(data?.error || 'Failed to create file.');
+        return;
+    }
+
+    await refreshWorkspaceAfterFileSave();
+    await viewFile(data.file.id, data.file.filename);
+    setFileModalStatus('New file created. Start typing.', 'info');
+}
+
 // Update code display (kept for internal state)
 function updateCodeDisplay() {
     // Code display removed from UI, but keep state updated
@@ -1273,10 +1308,5 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFileModalSaveState();
     
     // New file button
-    document.getElementById('new-file-btn').addEventListener('click', () => {
-        const filename = prompt('Enter filename (e.g., helper.js, styles.css):');
-        if (filename && filename.trim()) {
-            alert(`To create ${filename.trim()}, ask me to write it for you!\n\nTry: "Create a file called ${filename.trim()} with [what you want in it]"`);
-        }
-    });
+    document.getElementById('new-file-btn').addEventListener('click', createNewFile);
 });

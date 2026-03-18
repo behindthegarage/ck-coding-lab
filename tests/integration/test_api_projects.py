@@ -420,6 +420,33 @@ class TestProjectFilesAPI:
         assert 'todo.md' in filenames
         assert 'notes.md' in filenames
 
+    def test_creating_first_primary_code_file_syncs_project_current_code(self, client, auth_headers, project_factory, db_path):
+        """Creating the first primary code file should seed projects.current_code."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        response = client.post(
+            f'/api/projects/{project_id}/files',
+            headers=auth_headers,
+            json={'filename': 'index.html', 'content': '<html><body>Created</body></html>'}
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['file']['filename'] == 'index.html'
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['current_code'] == '<html><body>Created</body></html>'
+
     def test_updating_primary_code_file_syncs_project_current_code(self, client, auth_headers, project_factory, db_path):
         """File edits should keep projects.current_code aligned with the primary file."""
         import sqlite3
