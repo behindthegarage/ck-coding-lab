@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 42 - Three-pane workspace layout
+// Version 43 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -21,7 +21,6 @@ let currentFileOriginalContent = '';
 let fileModalSaving = false;
 let fileActionDialogState = null;
 let workspaceToastTimer = null;
-let versions = [];
 let fileSearchQuery = '';
 let activeFileMenuId = null;
 let fileSortMode = 'smart';
@@ -538,24 +537,6 @@ function showFileActionDialog({
     });
 }
 
-function showWorkspaceToast(message, type = 'info', durationMs = 3200) {
-    const toast = document.getElementById('workspace-toast');
-    if (!toast) return;
-
-    if (workspaceToastTimer) {
-        clearTimeout(workspaceToastTimer);
-    }
-
-    toast.textContent = message;
-    toast.className = `workspace-toast ${type}`;
-
-    workspaceToastTimer = setTimeout(() => {
-        toast.textContent = '';
-        toast.className = 'workspace-toast hidden';
-        workspaceToastTimer = null;
-    }, durationMs);
-}
-
 function updateFileModalSaveState() {
     const saveBtn = document.getElementById('file-modal-save');
     const renameBtn = document.getElementById('file-modal-rename');
@@ -820,157 +801,6 @@ async function closeFileModal(force = false) {
     return true;
 }
 
-function openVersionsModal() {
-    document.getElementById('versions-modal').classList.remove('hidden');
-    setVersionsStatus('');
-    loadVersions();
-}
-
-function closeVersionsModal() {
-    document.getElementById('versions-modal').classList.add('hidden');
-}
-
-function setVersionsStatus(message = '', type = 'info') {
-    const status = document.getElementById('versions-status');
-    if (!status) return;
-
-    if (!message) {
-        status.textContent = '';
-        status.className = 'versions-status hidden';
-        return;
-    }
-
-    status.textContent = message;
-    status.className = `versions-status ${type}`;
-}
-
-function formatVersionTimestamp(timestamp) {
-    if (!timestamp) return 'Unknown time';
-
-    const date = new Date(timestamp.replace(' ', 'T'));
-    if (Number.isNaN(date.getTime())) {
-        return timestamp;
-    }
-
-    return date.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-    });
-}
-
-function getVersionDescription(version) {
-    const description = (version.description || '').trim();
-    return description || 'Manual save';
-}
-
-function renderVersionsList() {
-    const container = document.getElementById('versions-list');
-    if (!container) return;
-
-    if (versions.length === 0) {
-        container.innerHTML = '<div class="file-loading">No saved versions yet.</div>';
-        return;
-    }
-
-    container.innerHTML = versions.map(version => {
-        const hasSnapshot = Number(version.has_files_snapshot) === 1;
-        const entryFile = version.entry_filename ? `<span class="version-chip">${escapeHtml(version.entry_filename)}</span>` : '';
-        const snapshotType = `<span class="version-chip">${hasSnapshot ? 'Multi-file snapshot' : 'Single-file save'}</span>`;
-
-        return `
-            <div class="version-item">
-                <div class="version-item-main">
-                    <div class="version-item-top">
-                        <strong>${escapeHtml(getVersionDescription(version))}</strong>
-                        <span class="version-date">${escapeHtml(formatVersionTimestamp(version.created_at))}</span>
-                    </div>
-                    <div class="version-meta">
-                        ${snapshotType}
-                        ${entryFile}
-                    </div>
-                </div>
-                <button class="btn-small restore-version-btn" data-version-id="${version.id}">Restore</button>
-            </div>
-        `;
-    }).join('');
-
-    container.querySelectorAll('.restore-version-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const versionId = Number(btn.dataset.versionId);
-            const version = versions.find(item => item.id === versionId);
-            await restoreVersion(version, btn);
-        });
-    });
-}
-
-async function loadVersions() {
-    const container = document.getElementById('versions-list');
-    if (!container) return;
-
-    container.innerHTML = '<div class="file-loading">Loading versions...</div>';
-
-    const data = await apiRequest(`/projects/${projectId}/versions`);
-    if (!data || !data.success) {
-        versions = [];
-        container.innerHTML = '<div class="file-loading">Could not load saved versions.</div>';
-        return;
-    }
-
-    versions = data.versions || [];
-    renderVersionsList();
-}
-
-async function restoreVersion(version, buttonEl) {
-    if (!version) return;
-
-    const description = getVersionDescription(version);
-    const action = await showFileActionDialog({
-        title: 'Restore saved version',
-        message: `Restore "${description}" from ${formatVersionTimestamp(version.created_at)}? This will replace the project's current files with that saved version.`,
-        confirmLabel: 'Restore version',
-        confirmClass: 'btn-primary',
-        needsInput: false
-    });
-    if (!action.confirmed) return;
-
-    const originalLabel = buttonEl ? buttonEl.textContent : '';
-    if (buttonEl) {
-        buttonEl.disabled = true;
-        buttonEl.textContent = 'Restoring...';
-    }
-
-    setVersionsStatus('Restoring version...', 'info');
-
-    try {
-        const data = await apiRequest(`/projects/${projectId}/versions/${version.id}/restore`, {
-            method: 'POST'
-        });
-
-        if (!data || !data.success) {
-            setVersionsStatus(data?.error || 'Failed to restore that version.', 'error');
-            return;
-        }
-
-        await closeFileModal(true);
-        await loadProject();
-        await loadVersions();
-        setVersionsStatus(`Restored "${description}".`, 'success');
-        showWorkspaceToast(`Restored "${description}".`, 'success');
-    } catch (error) {
-        console.error('Error restoring version:', error);
-        const message = error.message || 'Failed to restore that version.';
-        setVersionsStatus(message, 'error');
-        showWorkspaceToast(message, 'error', 4200);
-    } finally {
-        if (buttonEl) {
-            buttonEl.disabled = false;
-            buttonEl.textContent = originalLabel || 'Restore';
-        }
-    }
-}
-
 // Toggle sidebar
 function toggleSidebar() {
     const sidebar = document.getElementById('project-sidebar');
@@ -994,31 +824,6 @@ function toggleSidebar() {
     
     // Save preference
     localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
-}
-
-// Toggle preview panel
-function togglePreview() {
-    const preview = document.getElementById('preview-pane');
-    const showBtn = document.getElementById('show-preview-btn');
-    
-    previewCollapsed = !previewCollapsed;
-    
-    if (isMobile) {
-        // On mobile, use slide-in from right
-        if (previewCollapsed) {
-            preview.classList.remove('open');
-            showBtn.classList.remove('hidden');
-        } else {
-            preview.classList.add('open');
-            showBtn.classList.add('hidden');
-        }
-    } else {
-        // On desktop, collapse/expand
-        preview.classList.toggle('collapsed', previewCollapsed);
-    }
-    
-    // Save preference
-    localStorage.setItem('previewCollapsed', previewCollapsed);
 }
 
 // Handle window resize for responsive layout
@@ -1457,112 +1262,6 @@ async function createNewFile() {
     setFileModalStatus('New file created. Start typing.', 'info');
 }
 
-// Update code display (kept for internal state)
-function updateCodeDisplay() {
-    // Code display removed from UI, but keep state updated
-    // for preview functionality
-}
-
-// Run code in preview
-async function runPreview() {
-    const container = document.getElementById('preview-container');
-    
-    if (!container) {
-        console.error("runPreview: preview-container element not found!");
-        return;
-    }
-    
-    const language = (project && project.language) ? project.language : 'p5js';
-    
-    // Don't try to preview Python in browser
-    if (language === 'python') {
-        container.innerHTML = '<p class="preview-placeholder">Python code runs on your computer. Copy the code and run it locally with Python installed.</p>';
-        return;
-    }
-    
-    sandboxRunner = new SandboxRunner('preview-container');
-    
-    // Check if this is a multi-file project with index.html
-    const hasIndexHtml = projectFiles.some(f => f.filename === 'index.html');
-    
-    if (hasIndexHtml) {
-        // Multi-file project: fetch all files and build preview bundle
-        console.log("Multi-file project detected - fetching preview bundle");
-        try {
-            const response = await apiRequest(`/projects/${projectId}/preview-bundle`);
-            if (response && response.success && response.files) {
-                const bundledHtml = buildPreviewBundle(response.files);
-                sandboxRunner.runHTML(bundledHtml);
-                return;
-            }
-        } catch (e) {
-            console.error("Error loading preview bundle:", e);
-        }
-    }
-    
-    // Single-file fallback: use currentCode
-    if (!currentCode || !currentCode.trim()) {
-        container.innerHTML = '<p class="preview-placeholder">Your project preview will appear here.</p>';
-        return;
-    }
-    
-    sandboxRunner.run(currentCode, language);
-}
-
-// Build preview bundle from project files
-function buildPreviewBundle(files) {
-    // Get the index.html content
-    let indexHtml = files['index.html'] || '';
-    
-    // Inject CSS files into the head (as inline styles)
-    const cssFiles = Object.keys(files).filter(f => f.endsWith('.css'));
-    let cssInjection = '';
-    cssFiles.forEach(filename => {
-        const cssContent = files[filename] || '';
-        cssInjection += `\n<style data-file="${filename}">\n${cssContent}\n</style>\n`;
-    });
-    
-    // Inject CSS before </head> or after <head>
-    if (indexHtml.includes('</head>')) {
-        indexHtml = indexHtml.replace('</head>', `${cssInjection}</head>`);
-    } else if (indexHtml.includes('<head>')) {
-        indexHtml = indexHtml.replace('<head>', `<head>${cssInjection}`);
-    } else if (indexHtml.includes('<html>')) {
-        indexHtml = indexHtml.replace('<html>', `<html><head>${cssInjection}</head>`);
-    } else {
-        indexHtml = `<head>${cssInjection}</head>\n${indexHtml}`;
-    }
-    
-    // Replace script src references with inline content
-    const jsFiles = Object.keys(files).filter(f => f.endsWith('.js'));
-    
-    jsFiles.forEach(filename => {
-        const jsContent = files[filename] || '';
-        const scriptRegex = new RegExp(`<script[^>]*src=["']${filename}["'][^>]*>\s*</script>`, 'gi');
-        const inlineScript = `<script data-file="${filename}">\n${jsContent}\n</script>`;
-        indexHtml = indexHtml.replace(scriptRegex, inlineScript);
-    });
-    
-    // Inject any remaining JS files that weren't referenced via src
-    let jsInjection = '';
-    jsFiles.forEach(filename => {
-        if (!indexHtml.includes(`data-file="${filename}"`)) {
-            const jsContent = files[filename] || '';
-            jsInjection += `\n<script data-file="${filename}">\n${jsContent}\n</script>\n`;
-        }
-    });
-    
-    if (indexHtml.includes('</body>')) {
-        indexHtml = indexHtml.replace('</body>', `${jsInjection}</body>`);
-    } else if (indexHtml.includes('</html>')) {
-        indexHtml = indexHtml.replace('</html>', `${jsInjection}</html>`);
-    } else {
-        indexHtml += jsInjection;
-    }
-    
-    return indexHtml;
-}
-
 // Parse assistant message for display
 function parseAssistantMessage(content) {
     const result = {
@@ -1813,39 +1512,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('version-history-btn').addEventListener('click', openVersionsModal);
 
     // Save version button
-    document.getElementById('save-version-btn').addEventListener('click', async () => {
-        const action = await showFileActionDialog({
-            title: 'Save version',
-            message: 'Save the current project state so you can restore it later. A short description helps future-you.',
-            confirmLabel: 'Save version',
-            confirmClass: 'btn-primary',
-            initialValue: '',
-            inputLabel: 'Version description (optional)',
-            placeholder: 'Before adding enemies',
-            needsInput: true,
-            validate: () => ''
-        });
-        if (!action.confirmed) return;
-
-        const data = await apiRequest(`/projects/${projectId}/versions`, {
-            method: 'POST',
-            body: { description: action.value }
-        });
-
-        if (data && data.success) {
-            if (!document.getElementById('versions-modal').classList.contains('hidden')) {
-                await loadVersions();
-                setVersionsStatus('Saved a new version.', 'success');
-            }
-            showWorkspaceToast('Version saved.', 'success');
-        } else {
-            const errorMessage = data?.error || 'Failed to save version';
-            if (!document.getElementById('versions-modal').classList.contains('hidden')) {
-                setVersionsStatus(errorMessage, 'error');
-            }
-            showWorkspaceToast(errorMessage, 'error', 4200);
-        }
-    });
+    document.getElementById('save-version-btn').addEventListener('click', saveProjectVersion);
 
     // Logout button
     document.getElementById('logout-btn').addEventListener('click', () => {
