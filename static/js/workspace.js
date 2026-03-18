@@ -26,6 +26,7 @@ let activeFileMenuId = null;
 let fileSortMode = 'smart';
 let sidebarCollapsed = false;
 let previewCollapsed = false;
+let latestAssistantChanges = {};
 let isMobile = window.innerWidth < 768;
 let isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
 
@@ -164,6 +165,42 @@ function getFilteredProjectFiles() {
 
 function getProjectFileById(fileId) {
     return projectFiles.find(file => String(file.id) === String(fileId)) || null;
+}
+
+function getProjectFileByName(filename) {
+    return projectFiles.find(file => file.filename === filename) || null;
+}
+
+function setLatestAssistantChanges(changedFiles = []) {
+    latestAssistantChanges = {};
+    (changedFiles || []).forEach(file => {
+        const filename = (file && file.filename) || '';
+        if (!filename) return;
+        latestAssistantChanges[filename] = {
+            action: (file.action || 'updated').toLowerCase()
+        };
+    });
+}
+
+function getLatestAssistantChange(filename = '') {
+    return latestAssistantChanges[filename] || null;
+}
+
+function getRecentChangeBadgeLabel(action = 'updated') {
+    const normalized = String(action || 'updated').toLowerCase();
+    if (normalized === 'created') return 'New';
+    if (normalized === 'deleted') return 'Removed';
+    return 'AI';
+}
+
+async function openWorkspaceFileByName(filename) {
+    const file = getProjectFileByName(filename);
+    if (!file) {
+        showWorkspaceToast(`${filename} is no longer in this project.`, 'error', 4200);
+        return;
+    }
+
+    await viewFile(file.id, file.filename);
 }
 
 function closeAllFileMenus() {
@@ -329,11 +366,17 @@ function loadFileTree() {
             badge = 'CSS';
             fileEl.classList.add('code-file');
         }
+
+        const recentChange = getLatestAssistantChange(file.filename);
+        const recentBadge = recentChange
+            ? `<span class="file-recent-badge ${escapeHtml(recentChange.action)}" title="Hari recently ${escapeHtml(recentChange.action.replace(/_/g, ' '))} this file">${escapeHtml(getRecentChangeBadgeLabel(recentChange.action))}</span>`
+            : '';
         
         fileEl.innerHTML = `
             <div class="file-item-main">
                 <span class="file-icon">${icon}</span>
                 <span class="file-name">${escapeHtml(file.filename)}</span>
+                ${recentBadge}
                 ${badge ? `<span class="file-badge">${badge}</span>` : ''}
             </div>
             <div class="file-item-actions">
@@ -950,10 +993,12 @@ function loadConversations() {
     const container = document.getElementById('chat-messages');
 
     if (conversations.length === 0) {
+        setLatestAssistantChanges([]);
         return;
     }
 
     container.innerHTML = '';
+    let latestChangedFiles = [];
 
     conversations.forEach(msg => {
         if (msg.role === 'system') return;
@@ -968,12 +1013,17 @@ function loadConversations() {
             `;
         } else {
             const parsed = parseAssistantMessage(msg.content);
+            if (parsed.changedFiles && parsed.changedFiles.length > 0) {
+                latestChangedFiles = parsed.changedFiles;
+            }
             messageDiv.innerHTML = renderAssistantBubble(parsed, msg.model || 'kimi', msg.created_at);
         }
 
         container.appendChild(messageDiv);
     });
 
+    setLatestAssistantChanges(latestChangedFiles);
+    loadFileTree();
     container.scrollTop = container.scrollHeight;
 }
 
@@ -1004,43 +1054,91 @@ function renderToolCalls(toolCalls) {
     return html;
 }
 
-function renderChangedFiles(changedFiles) {
-    if (!changedFiles || changedFiles.length === 0) return '';
-
-    let html = '<div class="tool-calls-list">';
-    html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">What changed:</p>';
-
-    changedFiles.forEach(file => {
-        const action = (file.action || 'updated').replace(/_/g, ' ');
-        const actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
-        html += `
-            <div class="tool-call-item success">
-                <span class="tool-icon">✓</span>
-                <span>${escapeHtml(actionLabel)}</span>
-                <span class="tool-name">${escapeHtml(file.filename || 'file')}</span>
-            </div>
-        `;
-    });
-
-    html += '</div>';
-    return html;
+function normalizeFileActionLabel(action = 'updated') {
+    const normalized = String(action || 'updated').replace(/_/g, ' ').trim().toLowerCase();
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-function renderPrimaryFile(primaryFile) {
+function getFileActionTone(action = 'updated') {
+    const normalized = String(action || 'updated').toLowerCase();
+    if (normalized === 'created') return 'created';
+    if (normalized === 'deleted') return 'deleted';
+    if (normalized === 'appended') return 'appended';
+    return 'updated';
+}
+
+function summarizeChangedFiles(changedFiles) {
+    if (!changedFiles || changedFiles.length === 0) return '';
+
+    const actionCounts = changedFiles.reduce((counts, file) => {
+        const tone = getFileActionTone(file.action);
+        counts[tone] = (counts[tone] || 0) + 1;
+        return counts;
+    }, {});
+
+    const summaryParts = [`${changedFiles.length} file${changedFiles.length === 1 ? '' : 's'} changed`];
+    ['created', 'updated', 'appended', 'deleted'].forEach((tone) => {
+        if (!actionCounts[tone]) return;
+        summaryParts.push(`${actionCounts[tone]} ${tone}`);
+    });
+
+    return summaryParts.join(' • ');
+}
+
+function renderChangedFiles(changedFiles, primaryFile = '') {
+    if (!changedFiles || changedFiles.length === 0) return '';
+
+    return `
+        <section class="assistant-files-card">
+            <div class="assistant-files-header">
+                <p class="assistant-section-label">What changed</p>
+                <p class="assistant-files-summary">${escapeHtml(summarizeChangedFiles(changedFiles))}</p>
+            </div>
+            <div class="assistant-file-chip-list">
+                ${changedFiles.map(file => {
+                    const filename = file.filename || 'file';
+                    const tone = getFileActionTone(file.action);
+                    const actionLabel = normalizeFileActionLabel(file.action);
+                    const isPrimary = primaryFile && filename === primaryFile;
+                    return `
+                        <button class="assistant-file-chip" type="button" data-open-file="${escapeHtml(filename)}" title="Open ${escapeHtml(filename)}">
+                            <span class="assistant-file-chip-action ${tone}">${escapeHtml(actionLabel)}</span>
+                            <span class="assistant-file-chip-name">${escapeHtml(filename)}</span>
+                            ${isPrimary ? '<span class="assistant-file-chip-meta">Start here</span>' : ''}
+                            <span class="assistant-file-chip-open">Open</span>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        </section>
+    `;
+}
+
+function renderPrimaryFile(primaryFile, changedFiles = []) {
     if (!primaryFile) return '';
+
+    const alreadyListed = (changedFiles || []).some(file => file.filename === primaryFile);
+    if (alreadyListed) return '';
 
     return `
         <div class="entry-file-card">
-            <p class="entry-file-label">Start here:</p>
-            <div class="entry-file-chip">${escapeHtml(primaryFile)}</div>
+            <div>
+                <p class="assistant-section-label">Start here</p>
+                <p class="entry-file-copy">Open the main file first.</p>
+            </div>
+            <button class="assistant-file-link" type="button" data-open-file="${escapeHtml(primaryFile)}" title="Open ${escapeHtml(primaryFile)}">
+                <span class="assistant-file-chip-name">${escapeHtml(primaryFile)}</span>
+                <span class="assistant-file-chip-open">Open</span>
+            </button>
         </div>
     `;
 }
 
 function renderAssistantBubble(data, model, timestamp) {
     const explanationHtml = data.explanation ? `<div class="explanation">${formatText(data.explanation)}</div>` : '';
-    const changedFilesHtml = renderChangedFiles(data.changedFiles || []);
-    const primaryFileHtml = renderPrimaryFile(data.primaryFile);
+    const changedFiles = data.changedFiles || [];
+    const changedFilesHtml = renderChangedFiles(changedFiles, data.primaryFile || '');
+    const primaryFileHtml = renderPrimaryFile(data.primaryFile, changedFiles);
     const toolCallsHtml = renderToolCalls(data.toolCalls || []);
     const suggestions = data.suggestions || [];
 
@@ -1110,8 +1208,12 @@ async function sendMessage(message) {
             const hasFileChanges = changedFiles.length > 0;
             const hasToolCalls = data.response.tool_calls && data.response.tool_calls.length > 0;
 
+            setLatestAssistantChanges(changedFiles);
+
             if (hasFileChanges || hasToolCalls) {
                 await refreshFileTree();
+            } else {
+                loadFileTree();
             }
 
             if (data.response.code) {
@@ -1623,6 +1725,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!e.target.closest('.file-item-actions')) {
             closeAllFileMenus();
         }
+    });
+
+    document.getElementById('chat-messages').addEventListener('click', async (event) => {
+        const fileButton = event.target.closest('[data-open-file]');
+        if (!fileButton) return;
+
+        event.preventDefault();
+        await openWorkspaceFileByName(fileButton.dataset.openFile);
     });
 
     // Send button

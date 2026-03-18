@@ -750,6 +750,34 @@
     flex: 0 0 auto;
 }
 
+.file-recent-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: rgba(99, 102, 241, 0.18);
+    color: #c7d2fe;
+    flex: 0 0 auto;
+}
+
+.file-recent-badge.created {
+    background: rgba(16, 185, 129, 0.18);
+    color: #bbf7d0;
+}
+
+.file-recent-badge.deleted {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fecaca;
+}
+
+.file-recent-badge.appended {
+    background: rgba(168, 85, 247, 0.18);
+    color: #e9d5ff;
+}
+
 .file-item-actions {
     position: relative;
     flex: 0 0 auto;
@@ -1596,6 +1624,141 @@
 .chat-messages::-webkit-scrollbar-thumb:hover,
 .code-preview::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+/* ============================================
+   CHAT FILE AWARENESS
+   ============================================ */
+
+.assistant-files-card,
+.entry-file-card {
+    margin-top: 0.85rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(99, 102, 241, 0.24);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(15, 23, 42, 0.7));
+}
+
+.assistant-files-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.assistant-section-label {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #a5b4fc;
+}
+
+.assistant-files-summary,
+.entry-file-copy {
+    margin: 0.3rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.assistant-file-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.75rem;
+}
+
+.assistant-file-chip,
+.assistant-file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.8);
+    color: var(--text);
+    padding: 0.45rem 0.75rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    font: inherit;
+}
+
+.assistant-file-chip:hover,
+.assistant-file-chip:focus-visible,
+.assistant-file-link:hover,
+.assistant-file-link:focus-visible {
+    border-color: rgba(99, 102, 241, 0.45);
+    background: rgba(30, 41, 59, 0.92);
+    transform: translateY(-1px);
+}
+
+.assistant-file-chip:focus-visible,
+.assistant-file-link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.28);
+}
+
+.assistant-file-chip-action,
+.assistant-file-chip-meta,
+.assistant-file-chip-open {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.assistant-file-chip-action {
+    padding: 0.15rem 0.45rem;
+    background: rgba(96, 165, 250, 0.2);
+    color: #bfdbfe;
+}
+
+.assistant-file-chip-action.created {
+    background: rgba(16, 185, 129, 0.2);
+    color: #bbf7d0;
+}
+
+.assistant-file-chip-action.updated {
+    background: rgba(96, 165, 250, 0.2);
+    color: #bfdbfe;
+}
+
+.assistant-file-chip-action.appended {
+    background: rgba(168, 85, 247, 0.2);
+    color: #e9d5ff;
+}
+
+.assistant-file-chip-action.deleted {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fecaca;
+}
+
+.assistant-file-chip-name {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.8rem;
+}
+
+.assistant-file-chip-meta {
+    padding: 0.15rem 0.45rem;
+    background: rgba(245, 158, 11, 0.18);
+    color: #fde68a;
+}
+
+.assistant-file-chip-open {
+    color: #cbd5e1;
+}
+
+.entry-file-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 /* ============================================
