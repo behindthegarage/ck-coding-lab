@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Workspace - Club Kinawa Coding Lab</title>
     <link rel="stylesheet" href="/lab/static/css/style.css?v=31">
-    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=31">
+    <link rel="stylesheet" href="/lab/static/css/workspace.css?v=32">
     <link rel="stylesheet" href="/lab/static/css/sidebar.css?v=32">
     <!-- p5.js for preview -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
@@ -23,6 +23,7 @@
         </div>
         
         <div class="user-menu">
+            <button id="version-history-btn" class="btn-small">Version History</button>
             <button id="save-version-btn" class="btn-small">Save Version</button>
             <button id="logout-btn" class="btn-small">Log Out</button>
         </div>
@@ -126,9 +127,26 @@
             <pre id="modal-file-content" class="modal-file-content"><code>Loading...</code></pre>
         </div>
     </div>
+
+    <!-- Version History Modal -->
+    <div id="versions-modal" class="modal hidden">
+        <div class="modal-content modal-large versions-modal-content">
+            <div class="modal-header">
+                <div>
+                    <h3>Saved Versions</h3>
+                    <p class="versions-modal-subtitle">Restore a previous save point if you want to roll the project back.</p>
+                </div>
+                <button class="modal-close" id="versions-modal-close">×</button>
+            </div>
+            <div id="versions-status" class="versions-status hidden"></div>
+            <div id="versions-list" class="versions-list">
+                <div class="file-loading">Loading versions...</div>
+            </div>
+        </div>
+    </div>
     
     <script src="/lab/static/js/auth.js?v=4"></script>
     <script src="/lab/static/js/sandbox.js?v=26"></script>
-    <script src="/lab/static/js/workspace.js?v=35"></script>
+    <script src="/lab/static/js/workspace.js?v=36"></script>
 </body>
 </html>

@@ -10,6 +10,7 @@ Tests cover:
 - Authorization
 """
 
+import json
 import pytest
 import sqlite3
 
@@ -252,9 +253,15 @@ class TestListVersionsAPI:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO code_versions (project_id, code, description)
-            VALUES (?, ?, ?)
-        ''', (project_id, 'code1', 'Version 1'))
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            project_id,
+            'code1',
+            'Version 1',
+            json.dumps({'index.html': '<html></html>'}),
+            'index.html'
+        ))
         cursor.execute('''
             INSERT INTO code_versions (project_id, code, description)
             VALUES (?, ?, ?)
@@ -276,6 +283,11 @@ class TestListVersionsAPI:
         descriptions = [v['description'] for v in data['versions']]
         assert 'Version 1' in descriptions
         assert 'Version 2' in descriptions
+
+        version_by_description = {v['description']: v for v in data['versions']}
+        assert version_by_description['Version 1']['entry_filename'] == 'index.html'
+        assert version_by_description['Version 1']['has_files_snapshot'] == 1
+        assert version_by_description['Version 2']['has_files_snapshot'] == 0
     
     def test_list_versions_wrong_project(self, client, auth_headers):
         """Test listing versions for non-existent project."""
@@ -455,6 +467,164 @@ class TestGetVersionAPI:
 
 @pytest.mark.integration
 @pytest.mark.api
+class TestRestoreVersionAPI:
+    """Tests for restoring saved versions into live project state."""
+
+    def test_restore_version_replaces_multifile_project_state_from_snapshot(self, client, auth_headers, project_factory, db_path):
+        """Restore should replace project_files from files_snapshot and heal current_code."""
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', ('stale current code', project_id))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'index.html', '<html><body>old</body></html>'))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'notes.md', 'old note that should disappear'))
+
+        snapshot = {
+            'index.html': '<html><body>restored</body></html>',
+            'main.js': 'console.log("restored")',
+            'styles.css': 'body { background: black; }',
+        }
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            project_id,
+            'stale version code that should be ignored',
+            'Restore point',
+            json.dumps(snapshot, sort_keys=True),
+            'index.html'
+        ))
+        version_id = cursor.lastrowid
+        conn.commit()
+
+        response = client.post(
+            f'/api/projects/{project_id}/versions/{version_id}/restore',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['entry_filename'] == 'index.html'
+        assert data['restored_files_count'] == 3
+
+        cursor.execute(
+            'SELECT filename, content FROM project_files WHERE project_id = ? ORDER BY filename',
+            (project_id,)
+        )
+        files = {row['filename']: row['content'] for row in cursor.fetchall()}
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        project_row = cursor.fetchone()
+        conn.close()
+
+        assert files == {
+            'index.html': '<html><body>restored</body></html>',
+            'main.js': 'console.log("restored")',
+            'styles.css': 'body { background: black; }',
+        }
+        assert project_row['current_code'] == '<html><body>restored</body></html>'
+
+    def test_restore_version_legacy_single_file_rebuilds_live_project_files(self, client, auth_headers, project_factory, db_path):
+        """Legacy versions with only code should restore into a single authoritative file."""
+        project = project_factory(language='p5js')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('UPDATE projects SET current_code = ? WHERE id = ?', ('stale current code', project_id))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'main.js', 'console.log("old")'))
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'design.md', '# old design'))
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'function draw() { circle(50, 50, 25); }', 'Legacy restore point'))
+        version_id = cursor.lastrowid
+        conn.commit()
+
+        response = client.post(
+            f'/api/projects/{project_id}/versions/{version_id}/restore',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['entry_filename'] == 'sketch.js'
+        assert data['restored_files_count'] == 1
+
+        cursor.execute(
+            'SELECT filename, content FROM project_files WHERE project_id = ? ORDER BY filename',
+            (project_id,)
+        )
+        files = {row['filename']: row['content'] for row in cursor.fetchall()}
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        project_row = cursor.fetchone()
+        conn.close()
+
+        assert files == {'sketch.js': 'function draw() { circle(50, 50, 25); }'}
+        assert project_row['current_code'] == 'function draw() { circle(50, 50, 25); }'
+
+    def test_restore_version_wrong_project_returns_not_found(self, client, auth_headers, project_factory, db_path):
+        """A version cannot be restored through another project's endpoint."""
+        project1 = project_factory(language='html')
+        project2 = project_factory(language='html')
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description)
+            VALUES (?, ?, ?)
+        ''', (project1['id'], '<html>one</html>', 'Project 1 version'))
+        version_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.post(
+            f'/api/projects/{project2["id"]}/versions/{version_id}/restore',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+        assert response.get_json()['success'] is False
+
+    def test_restore_version_unauthorized(self, client, project_factory, db_path):
+        """Restore should require authentication."""
+        project = project_factory(language='html')
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO code_versions (project_id, code, description)
+            VALUES (?, ?, ?)
+        ''', (project['id'], '<html>saved</html>', 'Saved version'))
+        version_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.post(f'/api/projects/{project["id"]}/versions/{version_id}/restore')
+
+        assert response.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.api
 class TestVersionAuthorization:
     """Tests for version endpoint authorization."""
     
@@ -488,6 +658,7 @@ class TestVersionAuthorization:
             INSERT INTO code_versions (project_id, code, description)
             VALUES (?, ?, ?)
         ''', (project1_id, 'user1 code', 'User1 version'))
+        version_id = cursor.lastrowid
         conn.commit()
         conn.close()
         
@@ -503,5 +674,12 @@ class TestVersionAuthorization:
             f'/api/projects/{project1_id}/versions',
             headers=headers2,
             json={'description': 'Hacked'}
+        )
+        assert response.status_code == 404
+
+        # User2 tries to restore user1's version
+        response = client.post(
+            f'/api/projects/{project1_id}/versions/{version_id}/restore',
+            headers=headers2,
         )
         assert response.status_code == 404

@@ -1,6 +1,10 @@
+import json
+
 from projects.state import (
     build_project_state,
     choose_primary_code_file,
+    materialize_version_files,
+    restore_version_snapshot,
     sync_current_code_cache,
 )
 
@@ -100,3 +104,62 @@ class TestProjectState:
 
         assert 'ellipse' in state['current_code']
         assert row['current_code'] == state['current_code']
+
+    def test_materialize_version_files_prefers_snapshot_over_stale_code(self):
+        files, entry_filename = materialize_version_files(
+            'html',
+            code='stale legacy blob',
+            files_snapshot=json.dumps({
+                'index.html': '<html><body>fresh</body></html>',
+                'main.js': 'console.log("fresh")',
+            }),
+            entry_filename='index.html'
+        )
+
+        assert entry_filename == 'index.html'
+        assert files == {
+            'index.html': '<html><body>fresh</body></html>',
+            'main.js': 'console.log("fresh")',
+        }
+
+    def test_restore_version_snapshot_replaces_files_and_heals_current_code(self, db_connection):
+        project_id = self._create_project(
+            db_connection,
+            language='p5js',
+            current_code='stale current code'
+        )
+        db_connection.execute(
+            '''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+            ''',
+            (project_id, 'main.js', 'console.log("old")')
+        )
+        db_connection.execute(
+            '''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+            ''',
+            (project_id, 'notes.md', 'old notes')
+        )
+
+        state = restore_version_snapshot(
+            db_connection,
+            project_id,
+            'p5js',
+            code='function draw() { background(0); }',
+            files_snapshot=None,
+            entry_filename=None,
+        )
+
+        db_connection.execute(
+            'SELECT filename, content FROM project_files WHERE project_id = ? ORDER BY filename',
+            (project_id,)
+        )
+        files = {row['filename']: row['content'] for row in db_connection.fetchall()}
+        db_connection.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = db_connection.fetchone()
+
+        assert files == {'sketch.js': 'function draw() { background(0); }'}
+        assert state['restored_entry_filename'] == 'sketch.js'
+        assert row['current_code'] == 'function draw() { background(0); }'

@@ -17,6 +17,7 @@ from projects.state import (
     build_project_state,
     default_code_filename,
     deserialize_files_snapshot,
+    restore_version_snapshot,
     serialize_files_snapshot,
 )
 
@@ -96,6 +97,46 @@ def list_versions(project_id):
         versions = [row_to_dict(row) for row in db.fetchall()]
     
     return jsonify({"success": True, "versions": versions})
+
+
+@versions_bp.route('/projects/<int:project_id>/versions/<int:version_id>/restore', methods=['POST'])
+@require_auth
+def restore_version(project_id, version_id):
+    """Restore a saved version into the live project state."""
+    user_id = g.current_user['id']
+
+    with get_db() as db:
+        db.execute('SELECT language FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        project = db.fetchone()
+        if not project:
+            return jsonify({"success": False, "error": "Project not found"}), 404
+
+        db.execute('''
+            SELECT code, description, files_snapshot, entry_filename
+            FROM code_versions
+            WHERE id = ? AND project_id = ?
+        ''', (version_id, project_id))
+        version = row_to_dict(db.fetchone())
+
+        if not version:
+            return jsonify({"success": False, "error": "Version not found"}), 404
+
+        restored_state = restore_version_snapshot(
+            db,
+            project_id,
+            project['language'] or 'undecided',
+            code=version.get('code') or '',
+            files_snapshot=version.get('files_snapshot'),
+            entry_filename=version.get('entry_filename'),
+        )
+
+    return jsonify({
+        "success": True,
+        "version_id": version_id,
+        "description": version.get('description', ''),
+        "entry_filename": restored_state.get('restored_entry_filename'),
+        "restored_files_count": len(restored_state.get('project_files', {})),
+    })
 
 
 @versions_bp.route('/projects/<int:project_id>/versions/<int:version_id>', methods=['GET'])

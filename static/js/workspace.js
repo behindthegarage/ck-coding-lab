@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 34 - Three-pane workspace layout
+// Version 36 - Three-pane workspace layout
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -17,6 +17,7 @@ let currentCode = '';
 let sandboxRunner = null;
 let pendingUpload = null;
 let currentFileId = null;
+let versions = [];
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let isMobile = window.innerWidth < 768;
@@ -145,6 +146,148 @@ function closeFileModal() {
     document.getElementById('file-modal').classList.add('hidden');
     document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
     currentFileId = null;
+}
+
+function openVersionsModal() {
+    document.getElementById('versions-modal').classList.remove('hidden');
+    setVersionsStatus('');
+    loadVersions();
+}
+
+function closeVersionsModal() {
+    document.getElementById('versions-modal').classList.add('hidden');
+}
+
+function setVersionsStatus(message = '', type = 'info') {
+    const status = document.getElementById('versions-status');
+    if (!status) return;
+
+    if (!message) {
+        status.textContent = '';
+        status.className = 'versions-status hidden';
+        return;
+    }
+
+    status.textContent = message;
+    status.className = `versions-status ${type}`;
+}
+
+function formatVersionTimestamp(timestamp) {
+    if (!timestamp) return 'Unknown time';
+
+    const date = new Date(timestamp.replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) {
+        return timestamp;
+    }
+
+    return date.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+function getVersionDescription(version) {
+    const description = (version.description || '').trim();
+    return description || 'Manual save';
+}
+
+function renderVersionsList() {
+    const container = document.getElementById('versions-list');
+    if (!container) return;
+
+    if (versions.length === 0) {
+        container.innerHTML = '<div class="file-loading">No saved versions yet.</div>';
+        return;
+    }
+
+    container.innerHTML = versions.map(version => {
+        const hasSnapshot = Number(version.has_files_snapshot) === 1;
+        const entryFile = version.entry_filename ? `<span class="version-chip">${escapeHtml(version.entry_filename)}</span>` : '';
+        const snapshotType = `<span class="version-chip">${hasSnapshot ? 'Multi-file snapshot' : 'Single-file save'}</span>`;
+
+        return `
+            <div class="version-item">
+                <div class="version-item-main">
+                    <div class="version-item-top">
+                        <strong>${escapeHtml(getVersionDescription(version))}</strong>
+                        <span class="version-date">${escapeHtml(formatVersionTimestamp(version.created_at))}</span>
+                    </div>
+                    <div class="version-meta">
+                        ${snapshotType}
+                        ${entryFile}
+                    </div>
+                </div>
+                <button class="btn-small restore-version-btn" data-version-id="${version.id}">Restore</button>
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.restore-version-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const versionId = Number(btn.dataset.versionId);
+            const version = versions.find(item => item.id === versionId);
+            await restoreVersion(version, btn);
+        });
+    });
+}
+
+async function loadVersions() {
+    const container = document.getElementById('versions-list');
+    if (!container) return;
+
+    container.innerHTML = '<div class="file-loading">Loading versions...</div>';
+
+    const data = await apiRequest(`/projects/${projectId}/versions`);
+    if (!data || !data.success) {
+        versions = [];
+        container.innerHTML = '<div class="file-loading">Could not load saved versions.</div>';
+        return;
+    }
+
+    versions = data.versions || [];
+    renderVersionsList();
+}
+
+async function restoreVersion(version, buttonEl) {
+    if (!version) return;
+
+    const description = getVersionDescription(version);
+    const confirmed = confirm(`Restore "${description}" from ${formatVersionTimestamp(version.created_at)}?\n\nThis will replace the project's current files with that saved version.`);
+    if (!confirmed) return;
+
+    const originalLabel = buttonEl ? buttonEl.textContent : '';
+    if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.textContent = 'Restoring...';
+    }
+
+    setVersionsStatus('Restoring version...', 'info');
+
+    try {
+        const data = await apiRequest(`/projects/${projectId}/versions/${version.id}/restore`, {
+            method: 'POST'
+        });
+
+        if (!data || !data.success) {
+            setVersionsStatus(data?.error || 'Failed to restore that version.', 'error');
+            return;
+        }
+
+        closeFileModal();
+        await loadProject();
+        await loadVersions();
+        setVersionsStatus(`Restored "${description}".`, 'success');
+    } catch (error) {
+        console.error('Error restoring version:', error);
+        setVersionsStatus(error.message || 'Failed to restore that version.', 'error');
+    } finally {
+        if (buttonEl) {
+            buttonEl.disabled = false;
+            buttonEl.textContent = originalLabel || 'Restore';
+        }
+    }
 }
 
 // Toggle sidebar
@@ -925,6 +1068,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Version history button
+    document.getElementById('version-history-btn').addEventListener('click', openVersionsModal);
+
     // Save version button
     document.getElementById('save-version-btn').addEventListener('click', async () => {
         const description = prompt('Version description (optional):');
@@ -936,9 +1082,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (data && data.success) {
+            if (!document.getElementById('versions-modal').classList.contains('hidden')) {
+                await loadVersions();
+                setVersionsStatus('Saved a new version.', 'success');
+            }
             alert('Version saved!');
         } else {
-            alert('Failed to save version');
+            const errorMessage = data?.error || 'Failed to save version';
+            if (!document.getElementById('versions-modal').classList.contains('hidden')) {
+                setVersionsStatus(errorMessage, 'error');
+            }
+            alert(errorMessage);
         }
     });
 
@@ -956,13 +1110,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Modal close button
+    // Modal close buttons
     document.getElementById('modal-close').addEventListener('click', closeFileModal);
+    document.getElementById('versions-modal-close').addEventListener('click', closeVersionsModal);
     
-    // Close modal when clicking outside
+    // Close modals when clicking outside
     document.getElementById('file-modal').addEventListener('click', (e) => {
         if (e.target === document.getElementById('file-modal')) {
             closeFileModal();
+        }
+    });
+    document.getElementById('versions-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('versions-modal')) {
+            closeVersionsModal();
         }
     });
     

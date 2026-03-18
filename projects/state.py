@@ -11,7 +11,7 @@ Model:
 """
 
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 
 CODE_FILE_EXTENSIONS = ('.js', '.html', '.css', '.py')
@@ -165,6 +165,81 @@ def sync_current_code_cache(
             WHERE id = ?
         ''', (state['current_code'], project_id))
 
+    return state
+
+
+def replace_project_files(db, project_id: int, files: Dict[str, str]) -> None:
+    """Replace the project's live file set with an exact snapshot."""
+    db.execute('DELETE FROM project_files WHERE project_id = ?', (project_id,))
+
+    for filename in sorted(files):
+        db.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, filename, files[filename]))
+
+
+def materialize_version_files(
+    language: Optional[str],
+    code: str = '',
+    files_snapshot: Optional[str] = None,
+    entry_filename: Optional[str] = None,
+) -> Tuple[Dict[str, str], Optional[str]]:
+    """
+    Build the authoritative file map for a stored version.
+
+    Preference order:
+    1. Stored files_snapshot, if present
+    2. Legacy single-file code blob materialized into an entry file
+
+    If a malformed snapshot contains no code files but does include legacy code,
+    synthesize the entry file so restored current_code stays aligned to project_files.
+    """
+    files = deserialize_files_snapshot(files_snapshot)
+    code = code or ''
+
+    if files is not None:
+        restored_files = dict(files)
+        primary_file = choose_primary_code_file(language, restored_files)
+
+        if not primary_file and code.strip():
+            primary_file = entry_filename or default_code_filename(language)
+            restored_files.setdefault(primary_file, code)
+
+        return restored_files, primary_file or entry_filename
+
+    if code.strip():
+        primary_file = entry_filename or default_code_filename(language)
+        return {primary_file: code}, primary_file
+
+    return {}, entry_filename
+
+
+def restore_version_snapshot(
+    db,
+    project_id: int,
+    language: Optional[str],
+    code: str = '',
+    files_snapshot: Optional[str] = None,
+    entry_filename: Optional[str] = None,
+) -> Dict:
+    """Replace the live project state with a saved version snapshot."""
+    restored_files, restored_entry_filename = materialize_version_files(
+        language,
+        code=code,
+        files_snapshot=files_snapshot,
+        entry_filename=entry_filename,
+    )
+
+    replace_project_files(db, project_id, restored_files)
+    state = sync_current_code_cache(
+        db,
+        project_id,
+        language,
+        fallback_current_code='',
+        touch_project=True,
+    )
+    state['restored_entry_filename'] = state['primary_file'] or restored_entry_filename
     return state
 
 

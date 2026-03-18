@@ -98,6 +98,7 @@ ck-coding-lab/
 - `GET /api/projects/<id>/versions` - List saved versions
 - `POST /api/projects/<id>/versions` - Save current version
 - `GET /api/projects/<id>/versions/<vid>` - Get specific version
+- `POST /api/projects/<id>/versions/<vid>/restore` - Restore a saved version into the live project state
 
 ## Security
 
