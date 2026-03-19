@@ -90,7 +90,7 @@ cd /home/openclaw/ck-coding-lab
 ./deploy.sh  # Pulls latest, restarts service
 
 # 4. Verify
-curl https://clubkinawa.net/lab/health
+curl https://clubkinawa.net/lab/api/auth/health
 ```
 
 ## Service Map
@@ -130,7 +130,7 @@ Before pushing:
 - [ ] No hardcoded localhost:18789 (OpenClaw gateway) references
 
 After deploy:
-- [ ] `curl https://clubkinawa.net/lab/health` returns 200
+- [ ] `curl https://clubkinawa.net/lab/api/auth/health` returns 200
 - [ ] Can log in on production
 - [ ] AI chat works (test with simple prompt)
 
