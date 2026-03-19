@@ -15,6 +15,7 @@ from unittest.mock import patch, MagicMock, mock_open
 import json
 
 from ai.prompts import build_system_prompt
+from ai.workflow import analyze_workflow_context
 
 
 @pytest.mark.unit
@@ -175,7 +176,19 @@ class TestBuildMessages:
 class TestSystemPromptConstruction:
     """Tests for prompt contract and project context."""
 
-    def test_system_prompt_includes_multi_file_contract_and_primary_file(self):
+    def test_system_prompt_includes_multi_file_contract_primary_file_and_workflow_brief(self):
+        workflow = analyze_workflow_context(
+            message='Move fast and build a mini arcade page.',
+            conversation_history=[],
+            project_files={
+                'design.md': '# Design\n\n- Feature 1',
+                'architecture.md': '# Architecture\n\n- [Browser / Desktop / Mobile]',
+                'index.html': '<!DOCTYPE html>',
+                'main.js': 'console.log("ready")'
+            },
+            language='html',
+        )
+
         prompt = build_system_prompt(
             'Base prompt',
             'html',
@@ -183,11 +196,14 @@ class TestSystemPromptConstruction:
                 'index.html': '<!DOCTYPE html>',
                 'main.js': 'console.log("ready")'
             },
-            tools_enabled=True
+            tools_enabled=True,
+            workflow_context=workflow,
         )
 
         assert 'RESPONSE CONTRACT' in prompt
         assert 'Current primary / entry file: index.html' in prompt
+        assert 'WORKFLOW MODE FOR THIS TURN' in prompt
+        assert '- Mode: fast-path' in prompt
         assert 'Tools are available in this turn.' in prompt
         assert 'index.html' in prompt
         assert 'main.js' in prompt

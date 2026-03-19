@@ -19,6 +19,7 @@ FILE_PREFIX_PATTERN = re.compile(
 )
 TOOL_SUMMARY_MARKER = '\n---\n\n**Tool Calls:**'
 SECTION_HEADING_PATTERN = re.compile(r'(?im)^##+\s+')
+SECTION_BLOCK_PATTERN = re.compile(r'(?m)^##+\s+(.+)$')
 SUGGESTION_PATTERNS = [
     r'(?:^|\n)(?:##+\s*)?(?:Next ideas|Next steps|Suggestions|Ideas to try|What you could add|Try adding)[\s:]*\n((?:[-*•\d.]\s*.*?(?:\n|$))+)',
     r'(?:\*\*)?(?:What you could add|Suggestions)[\s:]*(?:\*\*)?\n((?:[-*•\d.]\s*.*?(?:\n|$))+)',
@@ -118,8 +119,53 @@ def _extract_explanation(content: str) -> str:
     return cleaned_content.strip()
 
 
-def _extract_suggestions(content: str) -> List[str]:
+def _extract_sections(content: str) -> Dict[str, str]:
+    """Split markdown heading sections into a normalized name -> body map."""
+    cleaned_content = _strip_tool_summary(content)
+    matches = list(SECTION_BLOCK_PATTERN.finditer(cleaned_content))
+    if not matches:
+        return {}
+
+    sections: Dict[str, str] = {}
+    for index, match in enumerate(matches):
+        section_name = (match.group(1) or '').strip().lower()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(cleaned_content)
+        sections[section_name] = cleaned_content[start:end].strip()
+
+    return sections
+
+
+def _extract_section_items(section_text: str) -> List[str]:
+    if not section_text:
+        return []
+
+    bullet_items = re.findall(r'(?m)^[-*•\d.]+\s*(.+?)\s*$', section_text)
+    cleaned_bullets = [item.strip() for item in bullet_items if item.strip()]
+    if cleaned_bullets:
+        return cleaned_bullets
+
+    paragraph_items = [chunk.strip() for chunk in re.split(r'\n\s*\n', section_text) if chunk.strip()]
+    return paragraph_items
+
+
+def _extract_named_section_items(sections: Dict[str, str], names: List[str]) -> List[str]:
+    for name in names:
+        if name in sections:
+            return _extract_section_items(sections[name])
+    return []
+
+
+def _extract_suggestions(content: str, sections: Optional[Dict[str, str]] = None) -> List[str]:
     """Extract suggestion bullet lists from the tail of the response."""
+    normalized_sections = sections or _extract_sections(content)
+    named_suggestions = _extract_named_section_items(
+        normalized_sections,
+        ['next ideas', 'next steps', 'suggestions', 'ideas to try', 'what you could add', 'try adding']
+    )
+    if named_suggestions:
+        return named_suggestions
+
     cleaned_content = _strip_tool_summary(content)
     last_fence_idx = cleaned_content.rfind('```')
     tail = cleaned_content[last_fence_idx + 3:] if last_fence_idx != -1 else cleaned_content
@@ -156,6 +202,9 @@ def parse_response(
     result = {
         'code': '',
         'explanation': '',
+        'decision_notes': [],
+        'assumptions': [],
+        'follow_up_questions': [],
         'suggestions': [],
         'created_files': [],
         'primary_file': None,
@@ -192,6 +241,16 @@ def parse_response(
     result['explanation'] = _extract_explanation(content)
     print(f"_parse_response: explanation length {len(result['explanation'])}")
 
-    result['suggestions'] = _extract_suggestions(content)
+    sections = _extract_sections(content)
+    result['decision_notes'] = _extract_named_section_items(
+        sections,
+        ['why this approach', 'why this plan', 'why i chose this', 'why', 'design choices', 'choices made']
+    )
+    result['assumptions'] = _extract_named_section_items(sections, ['assumptions'])
+    result['follow_up_questions'] = _extract_named_section_items(
+        sections,
+        ['questions for you', 'follow-up questions', 'follow up questions', 'questions', 'need from you']
+    )
+    result['suggestions'] = _extract_suggestions(content, sections=sections)
 
     return result

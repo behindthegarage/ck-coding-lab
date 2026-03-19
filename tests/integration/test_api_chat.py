@@ -453,3 +453,52 @@ class TestChatConversationFlow:
         conn.close()
 
         assert '<!DOCTYPE html>' in row['current_code']
+
+    def test_chat_returns_workflow_rationale_and_questions_and_persists_them(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        project = project_factory(language='html')
+
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': '',
+            'explanation': 'I turned this into a small playable prototype first.',
+            'decision_notes': [
+                'Started with one screen so the loop is easier to test.',
+                'Kept the controls simple for a first pass.'
+            ],
+            'assumptions': ['Single player for now.'],
+            'follow_up_questions': ['Should collecting stars happen with clicks or movement?'],
+            'suggestions': ['Add a score bar'],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 61,
+            'tool_calls': [],
+            'created_files': []
+        }
+
+        response = client.post(
+            f'/api/projects/{project["id"]}/chat',
+            headers=auth_headers,
+            json={'message': 'Make a star collecting game'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['response']['decision_notes'][0].startswith('Started with one screen')
+        assert data['response']['assumptions'] == ['Single player for now.']
+        assert data['response']['follow_up_questions'] == ['Should collecting stars happen with clicks or movement?']
+        assert data['response']['workflow']['phase'] == 'guided-kickoff'
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM conversations WHERE project_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+            (project['id'],)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row is not None
+        assert '## Why this approach' in row['content']
+        assert '## Assumptions' in row['content']
+        assert '## Questions for you' in row['content']

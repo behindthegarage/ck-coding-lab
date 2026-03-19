@@ -22,6 +22,7 @@ from ai.config import (
 from ai.prompts import load_agent_prompt, build_system_prompt
 from ai.tools import FileTools
 from ai.parser import parse_response
+from ai.workflow import analyze_workflow_context
 
 
 class AIClient:
@@ -88,9 +89,17 @@ class AIClient:
             if project_id:
                 project_files = self._load_project_files(project_id)
             
+            workflow_context = analyze_workflow_context(
+                message=message,
+                conversation_history=conversation_history,
+                project_files=project_files,
+                language=language,
+                current_code=current_code,
+            )
+
             # Build messages for the API
             messages_data = self._build_messages(
-                message, conversation_history, current_code, 
+                message, conversation_history, current_code,
                 language, project_files, enable_tools, project_id
             )
             
@@ -148,12 +157,16 @@ class AIClient:
                 "success": True,
                 "code": parsed["code"],
                 "explanation": parsed["explanation"],
+                "decision_notes": parsed.get("decision_notes", []),
+                "assumptions": parsed.get("assumptions", []),
+                "follow_up_questions": parsed.get("follow_up_questions", []),
                 "suggestions": parsed["suggestions"],
                 "full_response": final_content,
                 "tokens_used": response.get("tokens_used", 0),
                 "model": "kimi-k2.5",
                 "tool_calls": tool_calls,
-                "created_files": all_created_files
+                "created_files": all_created_files,
+                "workflow": workflow_context,
             }
             
         except Exception as e:
@@ -176,12 +189,21 @@ class AIClient:
         project_id: int = None
     ):
         """Build the message list for the Kimi API (Anthropic Messages format)."""
+        workflow_context = analyze_workflow_context(
+            message=message,
+            conversation_history=conversation_history,
+            project_files=project_files,
+            language=language,
+            current_code=current_code,
+        )
+
         # Get the full system prompt for this language
         system_content = build_system_prompt(
             self.base_system_prompt,
             language,
             project_files,
-            tools_enabled=bool(enable_tools and project_id)
+            tools_enabled=bool(enable_tools and project_id),
+            workflow_context=workflow_context,
         )
         
         # Map language to code block language identifier

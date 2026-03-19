@@ -18,6 +18,9 @@ class TestChatFileAwarenessSurface:
         assert "const fileButton = event.target.closest('[data-open-file]');" in js
         assert 'assistant-file-chip' in js
         assert 'assistant-review-card' in js
+        assert 'assistant-questions-card' in js
+        assert 'decisionNotes: data.response.decision_notes || []' in js
+        assert 'followUpQuestions: data.response.follow_up_questions || []' in js
         assert 'changeReview: data.response.change_review || []' in js
         assert 'file-recent-badge' in js
 
@@ -30,6 +33,8 @@ class TestChatFileAwarenessSurface:
         assert '.assistant-file-chip' in css
         assert '.assistant-file-link' in css
         assert '.assistant-file-chip-meta' in css
+        assert '.assistant-context-card' in css
+        assert '.assistant-questions-card' in css
         assert '.assistant-review-card' in css
         assert '.assistant-review-diff' in css
         assert '.file-recent-badge' in css
@@ -40,5 +45,5 @@ class TestChatFileAwarenessSurface:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=52' in html
+        assert '/lab/static/css/workspace.css?v=42' in html
+        assert '/lab/static/js/workspace.js?v=54' in html

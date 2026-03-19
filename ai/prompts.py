@@ -7,6 +7,7 @@ import os
 from typing import Dict, Optional
 
 from ai.config import LANGUAGE_CONTEXT, UNDECIDED_CONTEXT
+from ai.workflow import workflow_prompt_block
 from projects.state import choose_primary_code_file
 
 MAX_CONTEXT_FILE_CHARS = 1600
@@ -26,9 +27,11 @@ Follow this contract every time you help with code:
 
 After the file work is done, keep your final message simple and kid-friendly:
 1. One short paragraph explaining what changed.
-2. A `## What changed` section with short bullet points.
-3. If helpful, a `## Start here` section naming the entry file or main file.
-4. Optional `## Next ideas` bullets.
+2. Optional `## Why this approach` bullets when you made important design or architecture choices.
+3. A `## What changed` section with short bullet points whenever files changed.
+4. Optional `## Questions for you` bullets when you need a focused answer to shape the next step.
+5. If helpful, a `## Start here` section naming the entry file or main file.
+6. Optional `## Next ideas` bullets.
 """.strip()
 
 
@@ -86,6 +89,7 @@ def build_system_prompt(
     language: str,
     project_files: Optional[Dict[str, str]] = None,
     tools_enabled: bool = False,
+    workflow_context: Optional[Dict] = None,
 ) -> str:
     """
     Build the full system prompt for a given language.
@@ -95,6 +99,7 @@ def build_system_prompt(
         language: Which language mode ('p5js', 'html', 'python', or 'undecided')
         project_files: Optional dict of filename -> content for context
         tools_enabled: Whether file tools are available for this request
+        workflow_context: Optional per-turn kickoff/co-design guidance
 
     Returns:
         The complete system prompt string
@@ -108,6 +113,10 @@ def build_system_prompt(
         parts.append(lang_context.strip())
 
     parts.append(RESPONSE_CONTRACT)
+
+    workflow_block = workflow_prompt_block(workflow_context)
+    if workflow_block:
+        parts.append(workflow_block)
 
     if tools_enabled:
         parts.append("Tools are available in this turn. Use them for file reads and writes when that makes the result clearer and more reliable.")

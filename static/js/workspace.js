@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 53 - Three-pane workspace layout with AI edit review cards + launch intents
+// Version 54 - Three-pane workspace layout with AI edit review cards + kickoff/co-design context
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -1952,8 +1952,24 @@ function renderChangeReview(changeReview = []) {
     `;
 }
 
+function renderContextCard(title, items = [], cardClass = 'assistant-context-card') {
+    if (!items || items.length === 0) return '';
+
+    return `
+        <section class="${cardClass}">
+            <p class="assistant-section-label">${escapeHtml(title)}</p>
+            <ul class="assistant-context-list">
+                ${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+            </ul>
+        </section>
+    `;
+}
+
 function renderAssistantBubble(data, model, timestamp) {
     const explanationHtml = data.explanation ? `<div class="explanation">${formatText(data.explanation)}</div>` : '';
+    const decisionNotesHtml = renderContextCard('Why this approach', data.decisionNotes || [], 'assistant-context-card');
+    const assumptionsHtml = renderContextCard('Assumptions', data.assumptions || [], 'assistant-context-card assistant-assumptions-card');
+    const followUpQuestionsHtml = renderContextCard('Questions for you', data.followUpQuestions || [], 'assistant-questions-card');
     const changedFiles = data.changedFiles || [];
     const changedFilesHtml = renderChangedFiles(changedFiles, data.primaryFile || '');
     const primaryFileHtml = renderPrimaryFile(data.primaryFile, changedFiles);
@@ -1964,10 +1980,13 @@ function renderAssistantBubble(data, model, timestamp) {
     return `
         <div class="message-bubble">
             ${explanationHtml}
+            ${decisionNotesHtml}
+            ${assumptionsHtml}
             ${changedFilesHtml}
             ${changeReviewHtml}
             ${primaryFileHtml}
             ${toolCallsHtml}
+            ${followUpQuestionsHtml}
             ${suggestions.length > 0 ? `
                 <div class="suggestions">
                     <p><strong>Ideas to try:</strong></p>
@@ -2062,6 +2081,9 @@ async function sendMessage(message) {
             assistantMsg.className = 'message assistant';
             assistantMsg.innerHTML = renderAssistantBubble({
                 explanation: data.response.explanation,
+                decisionNotes: data.response.decision_notes || [],
+                assumptions: data.response.assumptions || [],
+                followUpQuestions: data.response.follow_up_questions || [],
                 suggestions: data.response.suggestions || [],
                 toolCalls: data.response.tool_calls || [],
                 changedFiles,
@@ -2363,6 +2385,9 @@ function parseAssistantMessage(content) {
     const result = {
         explanation: '',
         code: '',
+        decisionNotes: [],
+        assumptions: [],
+        followUpQuestions: [],
         suggestions: [],
         toolCalls: [],
         changedFiles: [],
@@ -2394,10 +2419,14 @@ function parseAssistantMessage(content) {
             return sectionText
                 .split('\n')
                 .map(line => line.trim())
-                .filter(line => /^[-*•]/.test(line))
-                .map(line => line.replace(/^[-*•]\s*/, '').trim())
+                .filter(line => /^[-*•\d.]/.test(line))
+                .map(line => line.replace(/^[-*•\d.]\s*/, '').trim())
                 .filter(Boolean);
         };
+
+        result.decisionNotes = parseBullets(sections['why this approach'] || sections['why this plan'] || sections['why i chose this'] || sections['why']);
+        result.assumptions = parseBullets(sections['assumptions']);
+        result.followUpQuestions = parseBullets(sections['questions for you'] || sections['follow-up questions'] || sections['follow up questions'] || sections['questions']);
 
         parseBullets(sections['what changed']).forEach(item => {
             const fileMatch = item.match(/^([A-Za-z ]+?)\s+`([^`]+)`$/);

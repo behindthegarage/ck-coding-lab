@@ -365,6 +365,34 @@ def greet(name):
         assert result['primary_file'] == 'main.py'
         assert 'Hello from main' in result['code']
 
+    def test_extracts_reasoning_assumptions_and_follow_up_questions_sections(self):
+        content = '''
+I turned the idea into a small playable prototype.
+
+## Why this approach
+- Started with one screen so the loop is easier to test.
+- Kept the controls simple for younger kids.
+
+## Assumptions
+- Single player for now.
+
+## Questions for you
+- Should collecting stars happen with clicks or movement?
+
+## Next ideas
+- Add a score bar.
+'''
+
+        result = parse_response(content, 'html')
+
+        assert result['decision_notes'] == [
+            'Started with one screen so the loop is easier to test.',
+            'Kept the controls simple for younger kids.'
+        ]
+        assert result['assumptions'] == ['Single player for now.']
+        assert result['follow_up_questions'] == ['Should collecting stars happen with clicks or movement?']
+        assert result['suggestions'] == ['Add a score bar.']
+
 
 @pytest.mark.unit
 class TestCodeValidationIntegration:

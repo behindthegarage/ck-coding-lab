@@ -17,8 +17,8 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-actions"' in html
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
-        assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=52' in html
+        assert '/lab/static/css/workspace.css?v=42' in html
+        assert '/lab/static/js/workspace.js?v=54' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):

@@ -13,6 +13,7 @@ from flask import request, jsonify, g
 from database import get_db
 from auth import require_auth
 from ai import get_ai_client
+from ai.workflow import analyze_workflow_context
 from chat import chat_bp
 from chat.rate_limit import check_chat_rate_limit
 from projects.access import can_access_project_owner
@@ -184,11 +185,34 @@ def _normalize_changed_files(changed_entries):
     ]
 
 
-def _build_assistant_message(explanation, changed_files, primary_file, suggestions, tool_calls, change_review):
+def _append_section(lines, title, items):
+    cleaned_items = [item.strip() for item in (items or []) if item and item.strip()]
+    if not cleaned_items:
+        return
+
+    lines.extend(['', title])
+    for item in cleaned_items[:5]:
+        lines.append(f"- {item}")
+
+
+def _build_assistant_message(
+    explanation,
+    changed_files,
+    primary_file,
+    suggestions,
+    tool_calls,
+    change_review,
+    decision_notes=None,
+    assumptions=None,
+    follow_up_questions=None,
+):
     """Create a consistent markdown transcript for assistant messages."""
     lines = []
     summary = (explanation or '').strip() or 'I updated the project.'
     lines.append(summary)
+
+    _append_section(lines, '## Why this approach', decision_notes)
+    _append_section(lines, '## Assumptions', assumptions)
 
     if changed_files:
         lines.extend(['', '## What changed'])
@@ -228,6 +252,8 @@ def _build_assistant_message(explanation, changed_files, primary_file, suggestio
                 lines.append(f"- `{tool_name}` on `{filename}`")
             else:
                 lines.append(f"- `{tool_name}`")
+
+    _append_section(lines, '## Questions for you', follow_up_questions)
 
     if suggestions:
         lines.extend(['', '## Next ideas'])
@@ -300,6 +326,14 @@ def chat_with_ai(project_id):
             for row in db.fetchall()
         ]
 
+    workflow_context = analyze_workflow_context(
+        message=message,
+        conversation_history=conversation_history,
+        project_files=project_state.get('project_files') or {},
+        language=language,
+        current_code=current_code,
+    )
+
     # Save user message
     with get_db() as db:
         db.execute('''
@@ -324,6 +358,8 @@ def chat_with_ai(project_id):
             'success': False,
             'error': result.get('error', 'AI generation failed')
         }), 500
+
+    workflow_context = result.get('workflow') or workflow_context
 
     tool_calls = result.get('tool_calls', []) or []
     changed_file_entries = _hydrate_changed_file_contents(
@@ -362,7 +398,10 @@ def chat_with_ai(project_id):
             project_state.get('primary_file'),
             result.get('suggestions', []),
             tool_calls,
-            change_review
+            change_review,
+            decision_notes=result.get('decision_notes', []),
+            assumptions=result.get('assumptions', []),
+            follow_up_questions=result.get('follow_up_questions', []),
         )
 
         db.execute('''
@@ -384,6 +423,10 @@ def chat_with_ai(project_id):
         'success': True,
         'response': {
             'explanation': result['explanation'],
+            'decision_notes': result.get('decision_notes', []),
+            'assumptions': result.get('assumptions', []),
+            'follow_up_questions': result.get('follow_up_questions', []),
+            'workflow': workflow_context,
             'code': response_code,
             'suggestions': result['suggestions'],
             'model': result['model'],
