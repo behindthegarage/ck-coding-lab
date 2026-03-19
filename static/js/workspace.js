@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 48 - Three-pane workspace layout with AI edit review cards
+// Version 49 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -27,6 +27,7 @@ let fileSearchQuery = '';
 let activeFileMenuId = null;
 let fileSortMode = 'smart';
 let openFolderPaths = {};
+let folderStateBeforeSearch = null;
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let latestAssistantChanges = {};
@@ -293,6 +294,7 @@ async function loadProject() {
     conversations = data.conversations || [];
     projectFiles = data.files || [];
     currentCode = project.current_code || '';
+    reconcileWorkspaceTreeState();
 
     // Update UI
     document.getElementById('project-name').textContent = project.name;
@@ -423,6 +425,46 @@ function setFolderOpen(path, open) {
 function toggleFolderOpen(path) {
     setFolderOpen(path, !isFolderOpen(path));
     loadFileTree();
+}
+
+function getExistingFolderPaths(files = projectFiles) {
+    const folderPaths = new Set();
+
+    (files || []).forEach((file) => {
+        const segments = String(file.filename || '').split('/').filter(Boolean);
+        if (segments.length <= 1) return;
+
+        let currentPath = '';
+        segments.slice(0, -1).forEach((segment) => {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            folderPaths.add(currentPath);
+        });
+    });
+
+    return folderPaths;
+}
+
+function pruneFolderStateSnapshot(snapshot, validPaths) {
+    const pruned = {};
+    Object.entries(snapshot || {}).forEach(([path, open]) => {
+        if (validPaths.has(path)) {
+            pruned[path] = open;
+        }
+    });
+    return pruned;
+}
+
+function reconcileWorkspaceTreeState() {
+    const validPaths = getExistingFolderPaths(projectFiles);
+    openFolderPaths = pruneFolderStateSnapshot(openFolderPaths, validPaths);
+
+    if (folderStateBeforeSearch) {
+        folderStateBeforeSearch = pruneFolderStateSnapshot(folderStateBeforeSearch, validPaths);
+    }
+
+    if (activeFileMenuId !== null && !getProjectFileById(activeFileMenuId)) {
+        activeFileMenuId = null;
+    }
 }
 
 function buildProjectFileTree(files) {
@@ -797,7 +839,20 @@ function loadFileTree() {
 }
 
 function setFileSearchQuery(value = '') {
-    fileSearchQuery = value.trimStart();
+    const nextQuery = value.trimStart();
+    const hadQuery = Boolean(fileSearchQuery.trim());
+    const hasQuery = Boolean(nextQuery.trim());
+
+    if (!hadQuery && hasQuery) {
+        folderStateBeforeSearch = { ...openFolderPaths };
+    }
+
+    if (hadQuery && !hasQuery) {
+        openFolderPaths = folderStateBeforeSearch ? { ...folderStateBeforeSearch } : openFolderPaths;
+        folderStateBeforeSearch = null;
+    }
+
+    fileSearchQuery = nextQuery;
     activeFileMenuId = null;
     loadFileTree();
 }
@@ -1155,6 +1210,7 @@ async function refreshWorkspaceAfterFileSave() {
     projectFiles = data.files || [];
     currentCode = project.current_code || '';
     activeFileMenuId = null;
+    reconcileWorkspaceTreeState();
 
     loadFileTree();
     updateCodeDisplay();

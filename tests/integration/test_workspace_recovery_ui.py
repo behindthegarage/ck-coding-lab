@@ -18,7 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=48' in html
+        assert '/lab/static/js/workspace.js?v=49' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
@@ -86,6 +86,34 @@ class TestWorkspaceRecoverySurface:
         assert "Network error while loading this project." in js
         assert "window.location.href = '/lab/projects';" in js
         assert 'redirectToProjects: /not found/i.test(message)' in js
+
+    def test_workspace_script_restores_folder_collapse_state_after_search(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'let folderStateBeforeSearch = null;' in js
+        assert 'function setFileSearchQuery(value = \'\') {' in js
+        assert 'const hadQuery = Boolean(fileSearchQuery.trim());' in js
+        assert 'const hasQuery = Boolean(nextQuery.trim());' in js
+        assert 'folderStateBeforeSearch = { ...openFolderPaths };' in js
+        assert 'openFolderPaths = folderStateBeforeSearch ? { ...folderStateBeforeSearch } : openFolderPaths;' in js
+        assert 'folderStateBeforeSearch = null;' in js
+
+    def test_workspace_script_prunes_stale_folder_and_menu_state_after_structural_changes(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'function getExistingFolderPaths(files = projectFiles)' in js
+        assert 'function pruneFolderStateSnapshot(snapshot, validPaths)' in js
+        assert 'function reconcileWorkspaceTreeState()' in js
+        assert 'openFolderPaths = pruneFolderStateSnapshot(openFolderPaths, validPaths);' in js
+        assert 'folderStateBeforeSearch = pruneFolderStateSnapshot(folderStateBeforeSearch, validPaths);' in js
+        assert 'if (activeFileMenuId !== null && !getProjectFileById(activeFileMenuId)) {' in js
+        assert 'reconcileWorkspaceTreeState();' in js
 
     def test_versions_script_handles_network_errors_during_save(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')
