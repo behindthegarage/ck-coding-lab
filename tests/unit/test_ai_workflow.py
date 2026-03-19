@@ -188,4 +188,5 @@ _None yet_
         assert 'WORKFLOW MODE FOR THIS TURN' in prompt_block
         assert 'Question budget: 0' in prompt_block
         assert 'Docs to update when decisions change: design.md, architecture.md, todo.md' in prompt_block
+        assert 'include an explicit plain-language doc update summary' in prompt_block
         assert 'Make sensible assumptions' in prompt_block

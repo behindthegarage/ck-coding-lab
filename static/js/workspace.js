@@ -1836,6 +1836,11 @@ function renderToolCalls(toolCalls) {
     return html;
 }
 
+function isDocPlanningFile(filename = '') {
+    const normalized = String(filename || '').toLowerCase();
+    return ['design.md', 'architecture.md', 'todo.md', 'notes.md'].includes(normalized.split('/').pop());
+}
+
 function normalizeFileActionLabel(action = 'updated') {
     const normalized = String(action || 'updated').replace(/_/g, ' ').trim().toLowerCase();
     return normalized.charAt(0).toUpperCase() + normalized.slice(1);
@@ -1865,6 +1870,29 @@ function summarizeChangedFiles(changedFiles) {
     });
 
     return summaryParts.join(' • ');
+}
+
+function renderDocUpdates(docUpdates = []) {
+    if (!docUpdates || docUpdates.length === 0) return '';
+
+    return `
+        <section class="assistant-context-card assistant-doc-updates-card">
+            <p class="assistant-section-label">Docs updated</p>
+            <div class="assistant-doc-update-list">
+                ${docUpdates.map((update) => {
+                    const filename = update.filename || 'doc.md';
+                    const summary = update.summary || 'Updated this planning doc.';
+                    return `
+                        <button class="assistant-doc-update-item" type="button" data-open-file="${escapeHtml(filename)}" title="Open ${escapeHtml(filename)}">
+                            <span class="assistant-file-chip-name">${escapeHtml(filename)}</span>
+                            <span class="assistant-doc-update-summary">${escapeHtml(summary)}</span>
+                            <span class="assistant-file-chip-open">Open</span>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        </section>
+    `;
 }
 
 function renderChangedFiles(changedFiles, primaryFile = '') {
@@ -1969,12 +1997,15 @@ function renderAssistantBubble(data, model, timestamp) {
     const explanationHtml = data.explanation ? `<div class="explanation">${formatText(data.explanation)}</div>` : '';
     const decisionNotesHtml = renderContextCard('Why this approach', data.decisionNotes || [], 'assistant-context-card');
     const assumptionsHtml = renderContextCard('Assumptions', data.assumptions || [], 'assistant-context-card assistant-assumptions-card');
+    const docUpdatesHtml = renderDocUpdates(data.docUpdates || []);
     const followUpQuestionsHtml = renderContextCard('Questions for you', data.followUpQuestions || [], 'assistant-questions-card');
     const changedFiles = data.changedFiles || [];
-    const changedFilesHtml = renderChangedFiles(changedFiles, data.primaryFile || '');
-    const primaryFileHtml = renderPrimaryFile(data.primaryFile, changedFiles);
+    const visibleChangedFiles = (data.docUpdates && data.docUpdates.length > 0)
+        ? changedFiles.filter(file => !isDocPlanningFile(file.filename))
+        : changedFiles;
+    const changedFilesHtml = renderChangedFiles(visibleChangedFiles, data.primaryFile || '');
+    const primaryFileHtml = renderPrimaryFile(data.primaryFile, visibleChangedFiles);
     const changeReviewHtml = renderChangeReview(data.changeReview || []);
-    const toolCallsHtml = renderToolCalls(data.toolCalls || []);
     const suggestions = data.suggestions || [];
 
     return `
@@ -1982,10 +2013,10 @@ function renderAssistantBubble(data, model, timestamp) {
             ${explanationHtml}
             ${decisionNotesHtml}
             ${assumptionsHtml}
+            ${docUpdatesHtml}
             ${changedFilesHtml}
             ${changeReviewHtml}
             ${primaryFileHtml}
-            ${toolCallsHtml}
             ${followUpQuestionsHtml}
             ${suggestions.length > 0 ? `
                 <div class="suggestions">
@@ -2083,6 +2114,7 @@ async function sendMessage(message) {
                 explanation: data.response.explanation,
                 decisionNotes: data.response.decision_notes || [],
                 assumptions: data.response.assumptions || [],
+                docUpdates: data.response.doc_updates || [],
                 followUpQuestions: data.response.follow_up_questions || [],
                 suggestions: data.response.suggestions || [],
                 toolCalls: data.response.tool_calls || [],
@@ -2380,6 +2412,26 @@ async function createNewFile() {
     }
 }
 
+function sanitizeAssistantContent(content) {
+    if (!content) return '';
+
+    let cleaned = String(content).replace(/\r\n/g, '\n');
+    const blockPatterns = [
+        /^\s*tool_calls_section_begin\b[\s\S]*?^\s*tool_calls_section_end\b\s*/gmi,
+        /^\s*tool_results_section_begin\b[\s\S]*?^\s*tool_results_section_end\b\s*/gmi,
+        /^\s*tool_call_begin\b[\s\S]*?^\s*tool_call_end\b\s*/gmi,
+        /^\s*tool_result_begin\b[\s\S]*?^\s*tool_result_end\b\s*/gmi
+    ];
+
+    blockPatterns.forEach((pattern) => {
+        cleaned = cleaned.replace(pattern, '\n');
+    });
+
+    cleaned = cleaned.replace(/^\s*(?:tool_(?:calls?_section|call|results?_section|result)_(?:begin|end)|tool_use|tool_result)\b.*$/gmi, '');
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    return cleaned.trim();
+}
+
 // Parse assistant message for display
 function parseAssistantMessage(content) {
     const result = {
@@ -2391,6 +2443,7 @@ function parseAssistantMessage(content) {
         suggestions: [],
         toolCalls: [],
         changedFiles: [],
+        docUpdates: [],
         changeReview: [],
         primaryFile: ''
     };
@@ -2399,7 +2452,7 @@ function parseAssistantMessage(content) {
         return result;
     }
 
-    const normalized = content.replace(/\r\n/g, '\n').trim();
+    const normalized = sanitizeAssistantContent(content);
     const headingRegex = /^##\s+(.+)$/gm;
     const matches = [...normalized.matchAll(headingRegex)];
 
@@ -2427,6 +2480,18 @@ function parseAssistantMessage(content) {
         result.decisionNotes = parseBullets(sections['why this approach'] || sections['why this plan'] || sections['why i chose this'] || sections['why']);
         result.assumptions = parseBullets(sections['assumptions']);
         result.followUpQuestions = parseBullets(sections['questions for you'] || sections['follow-up questions'] || sections['follow up questions'] || sections['questions']);
+
+        parseBullets(sections['doc updates']).forEach(item => {
+            const docMatch = item.match(/^`([^`]+)`\s*[—-]\s*(.+)$/);
+            if (docMatch) {
+                result.docUpdates.push({
+                    filename: docMatch[1].trim(),
+                    summary: docMatch[2].trim()
+                });
+            } else if (item) {
+                result.docUpdates.push({ summary: item.trim() });
+            }
+        });
 
         parseBullets(sections['what changed']).forEach(item => {
             const fileMatch = item.match(/^([A-Za-z ]+?)\s+`([^`]+)`$/);

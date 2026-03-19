@@ -171,6 +171,42 @@ class TestBuildMessages:
         # System prompt should include files
         assert system is not None
 
+    def test_build_messages_compacts_assistant_history_before_reuse(self, monkeypatch):
+        """Stored assistant transcripts should be compacted before they go back to the model."""
+        from ai.client import AIClient
+
+        monkeypatch.setenv('KIMI_API_KEY', 'test-key')
+
+        client = AIClient()
+        messages, _, _ = client._build_messages(
+            message='Keep going',
+            conversation_history=[
+                {
+                    'role': 'assistant',
+                    'content': '''I synced docs.
+
+## Doc updates
+- `design.md` — Captured the latest project direction: spooky forest theme.
+
+## Review
+### `main.js`
+- Action: Updated
+```diff
++ huge diff
+```
+'''
+                }
+            ],
+            current_code='',
+            language='html'
+        )
+
+        assistant_messages = [message for message in messages if message['role'] == 'assistant']
+        assert len(assistant_messages) == 1
+        assert 'spooky forest theme' in assistant_messages[0]['content']
+        assert '## Review' not in assistant_messages[0]['content']
+        assert 'huge diff' not in assistant_messages[0]['content']
+
 
 @pytest.mark.unit
 class TestSystemPromptConstruction:
@@ -205,6 +241,8 @@ class TestSystemPromptConstruction:
         assert 'WORKFLOW MODE FOR THIS TURN' in prompt
         assert '- Mode: fast-path' in prompt
         assert 'Tools are available in this turn.' in prompt
+        assert '## Doc updates' in prompt
+        assert 'tool_calls_section_begin' in prompt
         assert 'index.html' in prompt
         assert 'main.js' in prompt
 

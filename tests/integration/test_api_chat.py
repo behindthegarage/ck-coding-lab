@@ -342,6 +342,99 @@ class TestChatConversationFlow:
         assert '### `index.html`' in row['content']
         assert '```diff' in row['content']
 
+    def test_chat_summarizes_doc_updates_in_response_and_transcript(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        project = project_factory(language='html')
+
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': '',
+            'explanation': 'I tightened the plan before building.',
+            'suggestions': [],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 28,
+            'tool_calls': [],
+            'created_files': [
+                {
+                    'filename': 'design.md',
+                    'action': 'updated',
+                    'before_content': '# Design\n\n- Feature 1',
+                    'after_content': '# Design\n\n- Spooky forest theme\n- Two short levels\n'
+                },
+                {
+                    'filename': 'todo.md',
+                    'action': 'updated',
+                    'before_content': '# Todo\n\n- [ ] Initial setup',
+                    'after_content': '# Todo\n\n- [ ] Build the first level\n- [ ] Add falling stars\n'
+                }
+            ]
+        }
+
+        response = client.post(
+            f'/api/projects/{project["id"]}/chat',
+            headers=auth_headers,
+            json={'message': 'Use the spooky forest idea and plan the next build'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['response']['doc_updates']) == 2
+        assert data['response']['doc_updates'][0]['filename'] == 'design.md'
+        assert 'spooky forest theme' in data['response']['doc_updates'][0]['summary'].lower()
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM conversations WHERE project_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+            (project['id'],)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row is not None
+        assert '## Doc updates' in row['content']
+        assert '`design.md`' in row['content']
+        assert 'spooky forest theme' in row['content'].lower()
+
+    def test_chat_strips_internal_markup_from_visible_response(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        project = project_factory(language='html')
+
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': '',
+            'explanation': 'I cleaned this up.\n\ntool_call_begin\nwrite_file\ntool_call_end',
+            'suggestions': [],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 21,
+            'tool_calls': [],
+            'created_files': []
+        }
+
+        response = client.post(
+            f'/api/projects/{project["id"]}/chat',
+            headers=auth_headers,
+            json={'message': 'Clean it up'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'tool_call_begin' not in data['response']['explanation']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM conversations WHERE project_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+            (project['id'],)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row is not None
+        assert 'tool_call_begin' not in row['content']
+
     def test_chat_returns_synced_code_after_tool_written_primary_file(self, client, auth_headers, project_factory, db_path):
         """Tool-based code writes should refresh current_code from project_files."""
 

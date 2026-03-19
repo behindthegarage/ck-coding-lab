@@ -7,12 +7,15 @@ Provides endpoints for:
 """
 
 import difflib
+import posixpath
+import re
 
 from flask import request, jsonify, g
 
 from database import get_db
 from auth import require_auth
 from ai import get_ai_client
+from ai.parser import compact_assistant_transcript, sanitize_response_text
 from ai.workflow import analyze_workflow_context
 from chat import chat_bp
 from chat.rate_limit import check_chat_rate_limit
@@ -20,9 +23,21 @@ from projects.access import can_access_project_owner
 from projects.state import is_code_file, persist_generated_code, sync_current_code_cache
 
 WRITE_TOOL_NAMES = {'write_file', 'append_file'}
+DOC_FILENAMES = {'design.md', 'architecture.md', 'todo.md', 'notes.md'}
+DOC_UPDATE_PREFIXES = {
+    'design.md': 'Captured the latest project direction:',
+    'architecture.md': 'Recorded the current build structure:',
+    'todo.md': 'Reset the working checklist around:',
+    'notes.md': 'Logged the latest session decisions about:',
+}
 MAX_REVIEW_FILES = 3
 MAX_REVIEW_DIFF_LINES = 18
 MAX_REVIEW_CHARS = 1800
+MAX_DOC_HIGHLIGHTS = 3
+GENERIC_DOC_LINE_PATTERN = re.compile(
+    r'^(?:feature\s+\d+|stretch feature\s+\d+|initial setup|define core features|add your own twist)$',
+    re.IGNORECASE,
+)
 
 
 def _collect_changed_file_entries(tool_calls, created_files):
@@ -185,6 +200,118 @@ def _normalize_changed_files(changed_entries):
     ]
 
 
+def _is_doc_file(filename):
+    return posixpath.basename(filename or '').lower() in DOC_FILENAMES
+
+
+def _normalize_doc_highlight(line):
+    cleaned = (line or '').strip()
+    cleaned = re.sub(r'^#+\s*', '', cleaned)
+    cleaned = re.sub(r'^[-*•]\s*', '', cleaned)
+    cleaned = re.sub(r'^\d+\.\s*', '', cleaned)
+    cleaned = re.sub(r'^\[\s?[xX]?\]\s*', '', cleaned)
+    cleaned = cleaned.strip('` ').strip()
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return cleaned
+
+
+def _should_skip_doc_highlight(line):
+    normalized = _normalize_doc_highlight(line)
+    lowered = normalized.lower()
+    if not normalized:
+        return True
+    if lowered in {
+        'idea',
+        'starter path',
+        'core features',
+        'stretch goals',
+        'open questions',
+        'technology stack',
+        'file structure',
+        'key components',
+        'notes',
+        'first moves',
+        'current',
+        'completed',
+        'ideas',
+        'session log',
+        'questions to ask',
+        'decisions made',
+        '_none yet_',
+    }:
+        return True
+    return bool(GENERIC_DOC_LINE_PATTERN.match(lowered))
+
+
+def _extract_doc_highlights(before_content, after_content, action):
+    if (action or '').lower() == 'created' or not (before_content or '').strip():
+        candidate_lines = (after_content or '').splitlines()
+    else:
+        diff_lines = list(
+            difflib.unified_diff(
+                (before_content or '').splitlines(),
+                (after_content or '').splitlines(),
+                fromfile='before',
+                tofile='after',
+                n=0,
+                lineterm=''
+            )
+        )
+        candidate_lines = [line[1:] for line in diff_lines if line.startswith('+') and not line.startswith('+++')]
+
+    highlights = []
+    seen = set()
+    for line in candidate_lines:
+        normalized = _normalize_doc_highlight(line)
+        if _should_skip_doc_highlight(normalized):
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        highlights.append(normalized.rstrip('.'))
+        if len(highlights) >= MAX_DOC_HIGHLIGHTS:
+            break
+
+    return highlights
+
+
+def _build_doc_update_text(filename, before_content, after_content, action):
+    basename = posixpath.basename(filename or '').lower()
+    prefix = DOC_UPDATE_PREFIXES.get(basename, 'Updated the project notes around:')
+    highlights = _extract_doc_highlights(before_content, after_content, action)
+
+    if highlights:
+        return f"{prefix} {'; '.join(highlights)}."
+
+    fallback = {
+        'design.md': 'Updated the project direction and feature plan.',
+        'architecture.md': 'Updated the technical plan and file structure.',
+        'todo.md': 'Updated the next tasks and progress checklist.',
+        'notes.md': 'Updated the running session notes.',
+    }
+    return fallback.get(basename, 'Updated the project notes.')
+
+
+def _build_doc_updates(changed_entries):
+    doc_updates = []
+    for file_info in changed_entries:
+        filename = file_info.get('filename')
+        if not _is_doc_file(filename):
+            continue
+        doc_updates.append({
+            'filename': filename,
+            'action': file_info.get('action', 'updated'),
+            'summary': _build_doc_update_text(
+                filename,
+                file_info.get('before_content') or '',
+                file_info.get('after_content') or '',
+                file_info.get('action', 'updated')
+            )
+        })
+    return doc_updates
+
+
 def _append_section(lines, title, items):
     cleaned_items = [item.strip() for item in (items or []) if item and item.strip()]
     if not cleaned_items:
@@ -202,21 +329,34 @@ def _build_assistant_message(
     suggestions,
     tool_calls,
     change_review,
+    doc_updates=None,
     decision_notes=None,
     assumptions=None,
     follow_up_questions=None,
 ):
     """Create a consistent markdown transcript for assistant messages."""
     lines = []
-    summary = (explanation or '').strip() or 'I updated the project.'
+    summary = sanitize_response_text(explanation).strip() or 'I updated the project.'
     lines.append(summary)
 
     _append_section(lines, '## Why this approach', decision_notes)
     _append_section(lines, '## Assumptions', assumptions)
 
-    if changed_files:
+    if doc_updates:
+        lines.extend(['', '## Doc updates'])
+        for update in doc_updates[:4]:
+            filename = update.get('filename', 'doc.md')
+            summary_text = (update.get('summary') or 'Updated this planning doc.').strip()
+            lines.append(f"- `{filename}` — {summary_text}")
+
+    visible_changed_files = [
+        file_info for file_info in (changed_files or [])
+        if file_info.get('filename') and (not doc_updates or not _is_doc_file(file_info.get('filename')))
+    ]
+
+    if visible_changed_files:
         lines.extend(['', '## What changed'])
-        for file_info in changed_files:
+        for file_info in visible_changed_files:
             action = (file_info.get('action') or 'updated').capitalize()
             filename = file_info.get('filename', 'unknown file')
             lines.append(f"- {action} `{filename}`")
@@ -237,21 +377,6 @@ def _build_assistant_message(
 
     if primary_file and (len(changed_files) > 1 or not changed_files or changed_files[0].get('filename') != primary_file):
         lines.extend(['', '## Start here', f"- Entry file: `{primary_file}`"])
-
-    if tool_calls:
-        lines.extend(['', '## Tools used'])
-        for tool_call in tool_calls:
-            tool_name = tool_call.get('tool') or tool_call.get('name') or 'tool'
-            tool_input = tool_call.get('input') or {}
-            tool_result = tool_call.get('result') or {}
-            filename = tool_input.get('filename')
-            action = tool_result.get('action')
-            if filename and action:
-                lines.append(f"- `{tool_name}` on `{filename}` → {action}")
-            elif filename:
-                lines.append(f"- `{tool_name}` on `{filename}`")
-            else:
-                lines.append(f"- `{tool_name}`")
 
     _append_section(lines, '## Questions for you', follow_up_questions)
 
@@ -326,9 +451,20 @@ def chat_with_ai(project_id):
             for row in db.fetchall()
         ]
 
+    model_ready_history = []
+    for entry in conversation_history:
+        role = entry.get('role')
+        content = entry.get('content') or ''
+        if role == 'assistant':
+            content = compact_assistant_transcript(content)
+        else:
+            content = sanitize_response_text(content)
+        if content:
+            model_ready_history.append({'role': role, 'content': content})
+
     workflow_context = analyze_workflow_context(
         message=message,
-        conversation_history=conversation_history,
+        conversation_history=model_ready_history,
         project_files=project_state.get('project_files') or {},
         language=language,
         current_code=current_code,
@@ -345,7 +481,7 @@ def chat_with_ai(project_id):
     ai = get_ai_client()
     result = ai.generate_code(
         message=message,
-        conversation_history=conversation_history,
+        conversation_history=model_ready_history,
         current_code=current_code,
         language=language,
         model=model,
@@ -367,6 +503,7 @@ def chat_with_ai(project_id):
         _collect_changed_file_entries(tool_calls, result.get('created_files', []))
     )
     changed_files = _normalize_changed_files(changed_file_entries)
+    doc_updates = _build_doc_updates(changed_file_entries)
     change_review = _build_change_review(changed_file_entries)
     write_tools_used = any(
         (tool_call.get('tool') or tool_call.get('name')) in WRITE_TOOL_NAMES
@@ -399,6 +536,7 @@ def chat_with_ai(project_id):
             result.get('suggestions', []),
             tool_calls,
             change_review,
+            doc_updates=doc_updates,
             decision_notes=result.get('decision_notes', []),
             assumptions=result.get('assumptions', []),
             follow_up_questions=result.get('follow_up_questions', []),
@@ -419,10 +557,12 @@ def chat_with_ai(project_id):
     if result['code'] or code_files_touched:
         response_code = project_state['current_code']
 
+    explanation = sanitize_response_text(result.get('explanation', ''))
+
     return jsonify({
         'success': True,
         'response': {
-            'explanation': result['explanation'],
+            'explanation': explanation,
             'decision_notes': result.get('decision_notes', []),
             'assumptions': result.get('assumptions', []),
             'follow_up_questions': result.get('follow_up_questions', []),
@@ -434,6 +574,7 @@ def chat_with_ai(project_id):
             'tool_calls': tool_calls,
             'created_files': changed_files,
             'changed_files': changed_files,
+            'doc_updates': doc_updates,
             'change_review': change_review,
             'primary_file': project_state.get('primary_file')
         }

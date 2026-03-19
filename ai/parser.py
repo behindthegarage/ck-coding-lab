@@ -3,6 +3,8 @@
 Parse AI responses to extract code, explanations, suggestions, and file declarations.
 """
 
+from __future__ import annotations
+
 import re
 from typing import Dict, List, Optional
 
@@ -26,11 +28,70 @@ SUGGESTION_PATTERNS = [
     r'\n((?:[-*•]\s*.*?\n)+)',
 ]
 
+INTERNAL_MARKER_BLOCK_PATTERNS = [
+    re.compile(r'(?ims)^\s*tool_calls_section_begin\b.*?^\s*tool_calls_section_end\b\s*'),
+    re.compile(r'(?ims)^\s*tool_results_section_begin\b.*?^\s*tool_results_section_end\b\s*'),
+    re.compile(r'(?ims)^\s*tool_call_begin\b.*?^\s*tool_call_end\b\s*'),
+    re.compile(r'(?ims)^\s*tool_result_begin\b.*?^\s*tool_result_end\b\s*'),
+]
+INTERNAL_MARKER_LINE_PATTERN = re.compile(
+    r'(?im)^\s*(?:tool_(?:calls?_section|call|results?_section|result)_(?:begin|end)|tool_use|tool_result)\b.*$'
+)
+LEGACY_TOOL_LOG_LINE_PATTERN = re.compile(
+    r'(?im)^\s*(?:[-*]\s*)?(?:`)?(?:read_file|write_file|append_file|list_files)(?:`)?\s*[:(].*$'
+)
+GENERIC_CONTEXT_SKIP_LINES = {
+    'idea',
+    'starter path',
+    'core features',
+    'stretch goals',
+    'open questions',
+    'technology stack',
+    'file structure',
+    'key components',
+    'notes',
+    'first moves',
+    'current',
+    'completed',
+    'ideas',
+    'session log',
+    'questions to ask',
+    'decisions made',
+    '_none yet_',
+}
+GENERIC_CONTEXT_SKIP_PATTERNS = [
+    re.compile(r'^feature\s+\d+$', re.IGNORECASE),
+    re.compile(r'^stretch feature\s+\d+$', re.IGNORECASE),
+    re.compile(r'^initial setup$', re.IGNORECASE),
+    re.compile(r'^define core features$', re.IGNORECASE),
+    re.compile(r'^add your own twist$', re.IGNORECASE),
+    re.compile(r'^what (?:is|one) .+\?$' , re.IGNORECASE),
+]
+
+
+def sanitize_response_text(text: str) -> str:
+    """Strip internal tool/transcript artifacts from model-visible and user-visible text."""
+    if not text:
+        return ''
+
+    cleaned = text.replace('\r\n', '\n')
+
+    for pattern in INTERNAL_MARKER_BLOCK_PATTERNS:
+        cleaned = pattern.sub('\n', cleaned)
+
+    cleaned = INTERNAL_MARKER_LINE_PATTERN.sub('', cleaned)
+    cleaned = LEGACY_TOOL_LOG_LINE_PATTERN.sub('', cleaned)
+
+    if TOOL_SUMMARY_MARKER in cleaned:
+        cleaned = cleaned.split(TOOL_SUMMARY_MARKER, 1)[0]
+
+    cleaned = re.sub(r'(?im)^##+\s+tools used\s*$.*?(?=^##+\s+|\Z)', '', cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
 
 def _strip_tool_summary(text: str) -> str:
-    if TOOL_SUMMARY_MARKER in text:
-        return text.split(TOOL_SUMMARY_MARKER, 1)[0]
-    return text
+    return sanitize_response_text(text)
 
 
 def _extract_declared_files(content: str) -> List[Dict[str, str]]:
@@ -74,6 +135,7 @@ def _extract_declared_files(content: str) -> List[Dict[str, str]]:
 
 def _extract_primary_code(content: str, language: str, declared_files: List[Dict[str, str]]) -> str:
     """Extract the primary code block for compatibility with single-file flows."""
+    sanitized_content = sanitize_response_text(content)
     lang_identifiers = {
         'p5js': ['javascript', 'js', ''],
         'html': ['html', ''],
@@ -88,7 +150,7 @@ def _extract_primary_code(content: str, language: str, declared_files: List[Dict
             pattern = rf'```{ident}\s*\n(?!.*index\.html|.*style\.css|.*main\.js|.*dice\.js)(.*?)\n```'
         else:
             pattern = r'```\s*\n(.*?)(?:\n)?```'
-        matches = [match.strip() for match in re.findall(pattern, content, re.DOTALL) if match and match.strip()]
+        matches = [match.strip() for match in re.findall(pattern, sanitized_content, re.DOTALL) if match and match.strip()]
         if matches:
             code_matches = matches
             break
@@ -183,6 +245,80 @@ def _extract_suggestions(content: str, sections: Optional[Dict[str, str]] = None
     return []
 
 
+def _normalize_context_line(line: str) -> str:
+    cleaned = (line or '').strip()
+    cleaned = re.sub(r'^#+\s*', '', cleaned)
+    cleaned = re.sub(r'^[-*•]\s*', '', cleaned)
+    cleaned = re.sub(r'^\d+\.\s*', '', cleaned)
+    cleaned = re.sub(r'^\[\s?[xX]?\]\s*', '', cleaned)
+    cleaned = cleaned.strip('` ').strip()
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return cleaned
+
+
+def _is_generic_context_line(line: str) -> bool:
+    normalized = _normalize_context_line(line)
+    if not normalized:
+        return True
+
+    lowered = normalized.lower()
+    if lowered in GENERIC_CONTEXT_SKIP_LINES:
+        return True
+
+    return any(pattern.match(normalized) for pattern in GENERIC_CONTEXT_SKIP_PATTERNS)
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + '…'
+
+
+def compact_assistant_transcript(text: str, max_chars: int = 1800) -> str:
+    """Shrink stored assistant transcripts before they are fed back into the model."""
+    cleaned = sanitize_response_text(text)
+    if not cleaned:
+        return ''
+
+    sections = _extract_sections(cleaned)
+    explanation = _extract_explanation(cleaned)
+    if not sections:
+        return _truncate_text(cleaned, max_chars)
+
+    lines: List[str] = []
+    if explanation:
+        lines.append(explanation)
+
+    ordered_sections = [
+        'why this approach',
+        'assumptions',
+        'doc updates',
+        'what changed',
+        'questions for you',
+        'next ideas',
+    ]
+
+    for section_name in ordered_sections:
+        section_text = sections.get(section_name)
+        if not section_text:
+            continue
+
+        section_lines = [
+            item for item in _extract_section_items(section_text)
+            if item and not _is_generic_context_line(item)
+        ]
+        if not section_lines:
+            continue
+
+        title = section_name.title()
+        lines.append(f'## {title}')
+        for item in section_lines[:4]:
+            lines.append(f'- {_normalize_context_line(item)}')
+
+    compacted = '\n'.join(line for line in lines if line).strip()
+    return _truncate_text(compacted or cleaned, max_chars)
+
+
 def parse_response(
     content: str,
     language: str = 'undecided',
@@ -210,13 +346,11 @@ def parse_response(
         'primary_file': None,
     }
 
-    print(f"_parse_response: content length {len(content)}, project_id={project_id}")
+    sanitized_content = sanitize_response_text(content)
 
-    declared_files = _extract_declared_files(content)
+    declared_files = _extract_declared_files(sanitized_content)
     file_map = {file_info['filename']: file_info['content'] for file_info in declared_files}
     result['primary_file'] = choose_primary_code_file(language, file_map) if file_map else None
-
-    print(f"_parse_response: found {len(declared_files)} file declarations")
 
     if project_id and declared_files:
         file_tools = FileTools(project_id)
@@ -231,17 +365,13 @@ def parse_response(
                         'before_content': latest_change.get('before_content', ''),
                         'after_content': latest_change.get('after_content', file_info['content'])
                     })
-                    print(f"_parse_response: saved file {file_info['filename']}")
             except Exception as e:
                 print(f"_parse_response: error saving file {file_info['filename']}: {e}")
 
-    result['code'] = _extract_primary_code(content, language, declared_files)
-    print(f"_parse_response: extracted code length {len(result['code'])}")
+    result['code'] = _extract_primary_code(sanitized_content, language, declared_files)
+    result['explanation'] = _extract_explanation(sanitized_content)
 
-    result['explanation'] = _extract_explanation(content)
-    print(f"_parse_response: explanation length {len(result['explanation'])}")
-
-    sections = _extract_sections(content)
+    sections = _extract_sections(sanitized_content)
     result['decision_notes'] = _extract_named_section_items(
         sections,
         ['why this approach', 'why this plan', 'why i chose this', 'why', 'design choices', 'choices made']
@@ -251,6 +381,6 @@ def parse_response(
         sections,
         ['questions for you', 'follow-up questions', 'follow up questions', 'questions', 'need from you']
     )
-    result['suggestions'] = _extract_suggestions(content, sections=sections)
+    result['suggestions'] = _extract_suggestions(sanitized_content, sections=sections)
 
     return result

@@ -11,7 +11,7 @@ Tests cover:
 import pytest
 import re
 
-from ai.parser import parse_response
+from ai.parser import compact_assistant_transcript, parse_response, sanitize_response_text
 
 
 @pytest.mark.unit
@@ -308,6 +308,80 @@ The file wasn't created. Let me write it properly now:
         assert saved is not None
         assert '**Tool Calls:**' not in saved['content']
         assert 'read_file' not in saved['content']
+
+
+@pytest.mark.unit
+class TestInternalMarkupSanitization:
+    def test_sanitize_response_text_removes_internal_tool_markers(self):
+        content = '''
+I fixed the bug.
+
+tool_calls_section_begin
+tool_call_begin
+write_file
+{"filename": "index.html"}
+tool_call_end
+tool_calls_section_end
+
+## What changed
+- Updated `index.html`
+'''
+
+        cleaned = sanitize_response_text(content)
+
+        assert 'tool_calls_section_begin' not in cleaned
+        assert 'tool_call_begin' not in cleaned
+        assert 'write_file' not in cleaned
+        assert '## What changed' in cleaned
+
+    def test_parse_response_strips_internal_tool_markup_from_explanation(self):
+        content = '''
+I updated the starter.
+
+tool_result_begin
+{"success": true}
+tool_result_end
+
+## Next ideas
+- Add a score.
+'''
+
+        result = parse_response(content, 'html')
+
+        assert 'tool_result_begin' not in result['explanation']
+        assert result['explanation'] == 'I updated the starter.'
+        assert result['suggestions'] == ['Add a score.']
+
+    def test_compact_assistant_transcript_drops_review_noise_but_keeps_doc_summary(self):
+        content = '''
+I synced the plan and built the first pass.
+
+## Doc updates
+- `design.md` — Captured the latest project direction: spooky forest theme; two short levels.
+
+## What changed
+- Updated `main.js`
+
+## Review
+### `main.js`
+- Action: Updated
+- Summary: 40 added
+```diff
++ console.log("big diff")
++ line 2
+```
+
+## Questions for you
+- Want sound next?
+'''
+
+        compacted = compact_assistant_transcript(content)
+
+        assert '## Doc Updates' in compacted
+        assert 'spooky forest theme' in compacted
+        assert '## Review' not in compacted
+        assert 'console.log("big diff")' not in compacted
+        assert 'Want sound next?' in compacted
 
 
 @pytest.mark.unit

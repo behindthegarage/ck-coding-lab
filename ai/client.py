@@ -21,7 +21,7 @@ from ai.config import (
 )
 from ai.prompts import load_agent_prompt, build_system_prompt
 from ai.tools import FileTools
-from ai.parser import parse_response
+from ai.parser import compact_assistant_transcript, parse_response, sanitize_response_text
 from ai.workflow import analyze_workflow_context
 
 
@@ -222,8 +222,13 @@ class AIClient:
         if conversation_history:
             for msg in conversation_history[-10:]:  # Keep last 10 messages for context
                 role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role in ["user", "assistant"]:
+                raw_content = msg.get("content", "")
+                if role == "assistant":
+                    content = compact_assistant_transcript(raw_content)
+                else:
+                    content = sanitize_response_text(raw_content)
+
+                if role in ["user", "assistant"] and content:
                     messages.append({"role": role, "content": content})
         
         # Add the current message
