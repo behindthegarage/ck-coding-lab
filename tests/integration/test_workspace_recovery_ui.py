@@ -203,6 +203,19 @@ class TestWorkspaceRecoverySurface:
         assert 'suppressAssistantChangeBadgesForNextConversationRender();' in js
         assert "Couldn't create a safety net, so the restore was canceled." in js
 
+    def test_workspace_script_supports_opening_version_history_from_project_launch_intent(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'const workspaceLaunchParams = new URLSearchParams(window.location.search);' in js
+        assert 'function consumeWorkspaceLaunchIntent()' in js
+        assert "const modal = workspaceLaunchParams.get('modal');" in js
+        assert "if (modal === 'versions' && typeof openVersionsModal === 'function')" in js
+        assert 'window.history.replaceState({}, \'\', nextUrl);' in js
+        assert 'consumeWorkspaceLaunchIntent();' in js
+
     def test_workspace_styles_include_toast_action_layout(self, client):
         response = client.get('/lab/static/css/workspace.css')
 

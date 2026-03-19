@@ -35,3 +35,34 @@ class TestProjectsOnboardingSurface:
         assert 'function applyStarterPreset(presetKey, overwriteText = true)' in js
         assert 'function renderStarterPreview()' in js
         assert "openNewProjectModal('p5js')" in js
+
+    def test_projects_template_includes_oversight_filters_and_recovery_actions(self, client):
+        response = client.get('/lab/projects')
+
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+
+        assert 'id="oversight-summary"' in html
+        assert 'id="project-search"' in html
+        assert 'id="scope-filter"' in html
+        assert 'id="owner-filter"' in html
+        assert 'id="status-filter"' in html
+        assert 'data-quick-filter="needs-attention"' in html
+        assert 'Recovery &amp; cleanup tools' in html or 'Recovery & cleanup tools' in html
+        assert 'id="project-action-modal"' in html
+
+    def test_projects_script_supports_scope_filters_recent_projects_and_safe_recovery_actions(self, client):
+        response = client.get('/lab/static/js/projects.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert "const RECENT_PROJECTS_KEY = 'ckcl-recent-projects';" in js
+        assert 'function rememberRecentProject(projectId)' in js
+        assert 'function getFilteredProjects()' in js
+        assert "data-action=\"versions\"" in js
+        assert 'async function duplicateProject(project)' in js
+        assert 'async function toggleProjectArchive(project)' in js
+        assert 'async function resetProjectToStarter(project)' in js
+        assert 'A hidden recovery save point will be created first' in js
+        assert "openProject(button.dataset.projectId, { modal: 'versions' });" in js

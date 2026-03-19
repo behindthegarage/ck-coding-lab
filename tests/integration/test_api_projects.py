@@ -792,3 +792,259 @@ class TestProjectFilesAPI:
         assert data['deleted_file']['project_id'] == project_id
         assert data['deleted_file']['filename'] == 'notes.md'
         assert data['deleted_file']['content'] == '# Keep me safe'
+
+
+@pytest.mark.integration
+@pytest.mark.api
+class TestProjectOversightAndRecoveryAPI:
+    """Teacher/admin oversight and recovery flows should stay safe and useful."""
+
+    def test_admin_list_projects_scope_all_includes_metadata_and_latest_review(
+        self,
+        client,
+        admin_auth_headers,
+        test_user_factory,
+        auth_headers_factory,
+        db_path,
+    ):
+        import sqlite3
+
+        kid = test_user_factory('kiddo', '1111', role='kid')
+        kid_headers = auth_headers_factory(kid['id'])
+        create_response = client.post(
+            '/api/projects',
+            headers=kid_headers,
+            json={'name': 'Volcano Lab', 'description': 'Simulate eruptions', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO conversations (project_id, role, content)
+            VALUES (?, 'user', ?)
+            ''',
+            (project_id, 'Please fix the eruption button and save a review.'),
+        )
+        cursor.execute(
+            '''
+            INSERT INTO conversations (project_id, role, content)
+            VALUES (?, 'assistant', ?)
+            ''',
+            (
+                project_id,
+                'Updated the project.\n\n## Review\n### `index.html`\n- Action: Updated\n- Summary: 3 added\n```diff\n+ button fixed\n```',
+            ),
+        )
+        cursor.execute(
+            '''
+            INSERT INTO code_versions (project_id, code, description)
+            VALUES (?, ?, ?)
+            ''',
+            (project_id, '<html><body>Ready</body></html>', 'Teacher checkpoint'),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects?scope=all', headers=admin_auth_headers)
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['scope'] == 'all'
+
+        project = next(item for item in data['projects'] if item['id'] == project_id)
+        assert project['owner_username'] == 'kiddo'
+        assert project['file_count'] >= 5
+        assert project['version_count'] == 1
+        assert project['conversation_count'] == 2
+        assert project['latest_review']['headline'] == 'index.html • 3 added'
+        assert project['latest_user_message_preview'].startswith('Please fix the eruption button')
+        assert project['needs_attention'] is False
+
+    def test_kid_scope_all_request_still_only_returns_own_projects(
+        self,
+        client,
+        auth_headers,
+        test_user_factory,
+        auth_headers_factory,
+    ):
+        other_user = test_user_factory('someoneelse', '2222', role='kid')
+        other_headers = auth_headers_factory(other_user['id'])
+        client.post('/api/projects', headers=other_headers, json={'name': 'Other kid project'})
+        client.post('/api/projects', headers=auth_headers, json={'name': 'My own project'})
+
+        response = client.get('/api/projects?scope=all', headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['scope'] == 'mine'
+        names = [project['name'] for project in data['projects']]
+        assert 'My own project' in names
+        assert 'Other kid project' not in names
+
+    def test_admin_can_open_other_users_project_detail(self, client, admin_auth_headers, test_user_factory, auth_headers_factory):
+        kid = test_user_factory('builderkid', '3333', role='kid')
+        kid_headers = auth_headers_factory(kid['id'])
+        create_response = client.post('/api/projects', headers=kid_headers, json={'name': 'Bridge Builder', 'language': 'p5js'})
+        project_id = create_response.get_json()['project']['id']
+
+        response = client.get(f'/api/projects/{project_id}', headers=admin_auth_headers)
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['project']['name'] == 'Bridge Builder'
+        assert data['project']['owner_username'] == 'builderkid'
+        assert data['project']['can_administer'] is True
+        assert len(data['files']) >= 5
+
+    def test_duplicate_project_copies_live_files_and_version_history(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Maze Quest', 'description': 'Original run', 'language': 'python'},
+        )
+        original = create_response.get_json()['project']
+        project_id = original['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            UPDATE project_files
+            SET content = ?
+            WHERE project_id = ? AND filename = 'main.py'
+            ''',
+            ('print("clone me")', project_id),
+        )
+        cursor.execute(
+            '''
+            INSERT INTO code_versions (project_id, code, description, entry_filename)
+            VALUES (?, ?, ?, ?)
+            ''',
+            (project_id, 'print("versioned")', 'Checkpoint', 'main.py'),
+        )
+        conn.commit()
+        conn.close()
+
+        duplicate_response = client.post(
+            f'/api/projects/{project_id}/duplicate',
+            headers=auth_headers,
+            json={'name': 'Maze Quest Safe Copy'},
+        )
+
+        assert duplicate_response.status_code == 201
+        duplicate_data = duplicate_response.get_json()
+        duplicate_id = duplicate_data['project']['id']
+        assert duplicate_id != project_id
+        assert duplicate_data['project']['name'] == 'Maze Quest Safe Copy'
+        assert duplicate_data['copied_versions'] == 1
+        assert duplicate_data['copied_files'] >= 5
+
+        duplicate_project = client.get(f'/api/projects/{duplicate_id}', headers=auth_headers).get_json()
+        duplicate_versions = client.get(f'/api/projects/{duplicate_id}/versions', headers=auth_headers).get_json()
+
+        filenames = [file['filename'] for file in duplicate_project['files']]
+        assert 'main.py' in filenames
+        assert duplicate_project['project']['current_code'] == 'print("clone me")'
+        assert len(duplicate_versions['versions']) == 1
+        assert duplicate_versions['versions'][0]['description'] == 'Checkpoint'
+
+    def test_archive_project_toggles_archived_state(self, client, auth_headers):
+        create_response = client.post('/api/projects', headers=auth_headers, json={'name': 'Shelf Project'})
+        project_id = create_response.get_json()['project']['id']
+
+        archive_response = client.post(
+            f'/api/projects/{project_id}/archive',
+            headers=auth_headers,
+            json={'archived': True},
+        )
+        assert archive_response.status_code == 200
+        assert archive_response.get_json()['project']['is_archived'] is True
+
+        restore_response = client.post(
+            f'/api/projects/{project_id}/archive',
+            headers=auth_headers,
+            json={'archived': False},
+        )
+        assert restore_response.status_code == 200
+        assert restore_response.get_json()['project']['is_archived'] is False
+
+    def test_reset_project_reseeds_starter_files_and_creates_hidden_recovery_version(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Restartable Web', 'description': 'Needs a clean slate', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            UPDATE project_files
+            SET content = ?
+            WHERE project_id = ? AND filename = 'index.html'
+            ''',
+            ('<html><body>Before reset</body></html>', project_id),
+        )
+        cursor.execute(
+            '''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+            ''',
+            (project_id, 'scratch.txt', 'temporary notes'),
+        )
+        conn.commit()
+        conn.close()
+
+        reset_response = client.post(f'/api/projects/{project_id}/reset', headers=auth_headers)
+
+        assert reset_response.status_code == 200
+        reset_data = reset_response.get_json()
+        assert reset_data['success'] is True
+        assert reset_data['recovery_version_id'] is not None
+        assert 'index.html' in reset_data['created_files']
+
+        project_response = client.get(f'/api/projects/{project_id}', headers=auth_headers)
+        versions_response = client.get(f'/api/projects/{project_id}/versions', headers=auth_headers)
+
+        files = [file['filename'] for file in project_response.get_json()['files']]
+        assert 'scratch.txt' not in files
+        assert 'index.html' in files
+        assert '<!DOCTYPE html>' in project_response.get_json()['project']['current_code']
+
+        recovery_descriptions = [version['description'] for version in versions_response.get_json()['versions']]
+        assert any(description.startswith('__ckcl_recovery__:Before reset to starter') for description in recovery_descriptions)
+
+    def test_admin_can_access_other_users_file_and_version_endpoints(self, client, admin_auth_headers, test_user_factory, auth_headers_factory):
+        kid = test_user_factory('filekid', '4444', role='kid')
+        kid_headers = auth_headers_factory(kid['id'])
+        create_response = client.post('/api/projects', headers=kid_headers, json={'name': 'Teacher Peek', 'language': 'python'})
+        project_id = create_response.get_json()['project']['id']
+
+        save_response = client.post(
+            f'/api/projects/{project_id}/versions',
+            headers=kid_headers,
+            json={'description': 'Checkpoint one'},
+        )
+        assert save_response.status_code == 200
+
+        files_response = client.get(f'/api/projects/{project_id}/files', headers=admin_auth_headers)
+        versions_response = client.get(f'/api/projects/{project_id}/versions', headers=admin_auth_headers)
+        preview_response = client.get(f'/api/projects/{project_id}/preview-bundle', headers=admin_auth_headers)
+
+        assert files_response.status_code == 200
+        assert versions_response.status_code == 200
+        assert preview_response.status_code == 200
+        assert any(file['filename'] == 'main.py' for file in files_response.get_json()['files'])
+        assert versions_response.get_json()['versions'][0]['description'] == 'Checkpoint one'
+        assert preview_response.get_json()['entry_filename'] == 'main.py'
