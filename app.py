@@ -154,6 +154,7 @@ def create_app(test_config: dict = None) -> Flask:
     
     # Frontend routes - serve the lab interface
     @app.route('/lab')
+    @app.route('/lab/')
     def lab_index():
         """Main lab interface - redirect to login."""
         return send_from_directory('templates', 'login.html')
