@@ -13,3 +13,4 @@ class TestLabEntryRoute:
             html = response.get_data(as_text=True)
             assert 'Welcome to Coding Lab' in html
             assert 'PIN Code' in html
+            assert '/lab/static/js/auth.js?v=8' in html

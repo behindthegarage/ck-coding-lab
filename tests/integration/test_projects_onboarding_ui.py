@@ -20,6 +20,7 @@ class TestProjectsOnboardingSurface:
         assert 'data-template="python"' in html
         assert 'id="starter-preview"' in html
         assert 'Choose a starter, then change one thing right away' in html
+        assert '/lab/static/js/auth.js?v=8' in html
 
     def test_projects_script_supports_empty_state_starters_preview_updates_and_retryable_load_errors(self, client):
         response = client.get('/lab/static/js/projects.js')

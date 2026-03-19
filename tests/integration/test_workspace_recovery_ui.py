@@ -18,6 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=42' in html
+        assert '/lab/static/js/auth.js?v=8' in html
         assert '/lab/static/js/workspace.js?v=54' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
