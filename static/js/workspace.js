@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 47 - Three-pane workspace layout with AI edit review cards
+// Version 48 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -237,11 +237,57 @@ async function handleGlobalWorkspaceShortcuts(e) {
     }
 }
 
+function renderWorkspaceLoadFailure(message, { redirectToProjects = false } = {}) {
+    const safeMessage = message || 'Could not load this project right now.';
+
+    const projectNameEl = document.getElementById('project-name');
+    if (projectNameEl) {
+        projectNameEl.textContent = redirectToProjects ? 'Project not found' : 'Project unavailable';
+    }
+
+    const fileTree = document.getElementById('file-tree');
+    if (fileTree) {
+        fileTree.innerHTML = `<div class="file-loading">${escapeHtml(safeMessage)}</div>`;
+    }
+
+    const chatMessages = document.getElementById('chat-messages');
+    if (chatMessages) {
+        chatMessages.innerHTML = `<div class="file-loading">${escapeHtml(safeMessage)}</div>`;
+    }
+
+    const previewContainer = document.getElementById('preview-container');
+    if (previewContainer) {
+        previewContainer.innerHTML = `<p class="preview-placeholder">${escapeHtml(safeMessage)}</p>`;
+    }
+
+    showWorkspaceToast(safeMessage, 'error', redirectToProjects ? 2600 : 4200);
+
+    if (redirectToProjects) {
+        window.setTimeout(() => {
+            window.location.href = '/lab/projects';
+        }, 1600);
+    }
+}
+
 // Load project data
 async function loadProject() {
-    const data = await apiRequest(`/projects/${projectId}`);
+    let data;
+    try {
+        data = await apiRequest(`/projects/${projectId}`);
+    } catch (error) {
+        renderWorkspaceLoadFailure(`Network error while loading this project. ${error.message || 'Please try again.'}`);
+        return;
+    }
 
     if (!data) return;
+
+    if (!data.success || !data.project) {
+        const message = data.error || 'Could not load this project right now.';
+        renderWorkspaceLoadFailure(message, {
+            redirectToProjects: /not found/i.test(message),
+        });
+        return;
+    }
 
     project = data.project;
     conversations = data.conversations || [];
@@ -778,6 +824,48 @@ function isFileModalDirty() {
 
 function getCurrentFileRecord() {
     return projectFiles.find(file => String(file.id) === String(currentFileId)) || null;
+}
+
+function getUnsavedWorkspaceChangesMessage() {
+    const currentFile = getCurrentFileRecord();
+    const filename = currentFile?.filename || 'this file';
+    return `You have unsaved changes in ${filename}. Leave this page and lose them?`;
+}
+
+function hasUnsavedWorkspaceChanges() {
+    return isFileModalDirty();
+}
+
+function handleWorkspaceBeforeUnload(event) {
+    if (!hasUnsavedWorkspaceChanges()) {
+        return undefined;
+    }
+
+    const message = getUnsavedWorkspaceChangesMessage();
+    event.preventDefault();
+    event.returnValue = message;
+    return message;
+}
+
+async function confirmLeavingWorkspace({
+    title = 'Leave workspace',
+    message = getUnsavedWorkspaceChangesMessage(),
+    confirmLabel = 'Leave anyway',
+    confirmClass = 'btn-small file-modal-danger',
+} = {}) {
+    if (!hasUnsavedWorkspaceChanges()) {
+        return true;
+    }
+
+    const action = await showFileActionDialog({
+        title,
+        message,
+        confirmLabel,
+        confirmClass,
+        needsInput: false,
+    });
+
+    return action.confirmed;
 }
 
 function validateFilenameInput(filename, { existingId = null } = {}) {
@@ -2339,9 +2427,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('shortcuts-help-btn').addEventListener('click', openShortcutsModal);
 
     // Logout button
-    document.getElementById('logout-btn').addEventListener('click', () => {
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+        const canLeave = await confirmLeavingWorkspace({
+            title: 'Log out and discard unsaved changes',
+            message: `${getUnsavedWorkspaceChangesMessage()} Logging out now will discard them.`,
+            confirmLabel: 'Log out anyway',
+            confirmClass: 'btn-small file-modal-danger',
+        });
+
+        if (!canLeave) {
+            return;
+        }
+
         logout();
-        window.location.href = '/lab/login';
     });
 
     // File upload
@@ -2414,6 +2512,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', handleGlobalWorkspaceShortcuts);
+    window.addEventListener('beforeunload', handleWorkspaceBeforeUnload);
 
     applyShortcutHints();
     initializeWorkspaceToast();
