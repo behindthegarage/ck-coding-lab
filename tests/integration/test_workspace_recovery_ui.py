@@ -19,7 +19,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=41' in html
         assert '/lab/static/js/workspace.js?v=48' in html
-        assert '/lab/static/js/workspace-versions.js?v=3' in html
+        assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
         response = client.get('/lab/static/js/workspace.js')
@@ -32,6 +32,20 @@ class TestWorkspaceRecoverySurface:
         assert 'async function handleWorkspaceToastAction()' in js
         assert 'function initializeWorkspaceToast()' in js
         assert 'You can undo this right after deleting if you change your mind.' in js
+
+    def test_workspace_script_handles_network_errors_during_file_create(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'async function createNewFile()' in js
+        assert 'let data;' in js
+        assert 'try {' in js
+        assert 'data = await apiRequest(`/projects/${projectId}/files`,' in js
+        assert '} catch (error) {' in js
+        assert "error.message || 'Failed to create file. Please try again.'" in js
+        assert 'try {' in js and 'await viewFile(data.file.id, data.file.filename);' in js
 
     def test_workspace_script_ignores_stale_file_loads_before_updating_modal_state(self, client):
         response = client.get('/lab/static/js/workspace.js')
@@ -72,6 +86,18 @@ class TestWorkspaceRecoverySurface:
         assert "Network error while loading this project." in js
         assert "window.location.href = '/lab/projects';" in js
         assert 'redirectToProjects: /not found/i.test(message)' in js
+
+    def test_versions_script_handles_network_errors_during_save(self, client):
+        response = client.get('/lab/static/js/workspace-versions.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'let data;' in js
+        assert 'try {' in js
+        assert 'data = await apiRequest(`/projects/${projectId}/versions`,' in js
+        assert '} catch (error) {' in js
+        assert "error.message || 'Failed to save version. Please try again.'" in js
 
     def test_versions_script_creates_hidden_recovery_points_before_restore(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')

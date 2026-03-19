@@ -447,10 +447,20 @@ async function saveProjectVersion(options = {}) {
     });
     if (!action.confirmed) return;
 
-    const data = await apiRequest(`/projects/${projectId}/versions`, {
-        method: 'POST',
-        body: { description: action.value }
-    });
+    let data;
+    try {
+        data = await apiRequest(`/projects/${projectId}/versions`, {
+            method: 'POST',
+            body: { description: action.value }
+        });
+    } catch (error) {
+        const errorMessage = error.message || 'Failed to save version. Please try again.';
+        if (!document.getElementById('versions-modal').classList.contains('hidden')) {
+            setVersionsStatus(errorMessage, 'error');
+        }
+        showWorkspaceToast(errorMessage, 'error', 4200);
+        return;
+    }
 
     if (data && data.success) {
         if (!document.getElementById('versions-modal').classList.contains('hidden')) {

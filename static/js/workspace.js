@@ -2118,10 +2118,16 @@ async function createNewFile() {
     if (!action.confirmed) return;
 
     const filename = action.value;
-    const data = await apiRequest(`/projects/${projectId}/files`, {
-        method: 'POST',
-        body: { filename, content: '' }
-    });
+    let data;
+    try {
+        data = await apiRequest(`/projects/${projectId}/files`, {
+            method: 'POST',
+            body: { filename, content: '' }
+        });
+    } catch (error) {
+        showWorkspaceToast(error.message || 'Failed to create file. Please try again.', 'error');
+        return;
+    }
 
     if (!data || !data.success) {
         showWorkspaceToast(data?.error || 'Failed to create file.', 'error');
@@ -2129,8 +2135,12 @@ async function createNewFile() {
     }
 
     await refreshWorkspaceAfterFileSave();
-    await viewFile(data.file.id, data.file.filename);
-    setFileModalStatus('New file created. Start typing.', 'info');
+    try {
+        await viewFile(data.file.id, data.file.filename);
+        setFileModalStatus('New file created. Start typing.', 'info');
+    } catch (error) {
+        showWorkspaceToast(`Created ${data.file.filename}, but could not open it.`, 'success', 4200);
+    }
 }
 
 // Parse assistant message for display
