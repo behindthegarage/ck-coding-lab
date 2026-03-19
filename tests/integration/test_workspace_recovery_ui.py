@@ -18,7 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=51' in html
+        assert '/lab/static/js/workspace.js?v=52' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
@@ -164,6 +164,19 @@ class TestWorkspaceRecoverySurface:
         assert 'This file changed elsewhere. Review before saving so you do not overwrite newer code.' in js
         assert 'File updated from the latest project state.' in js
         assert 'syncOpenFileModalWithProjectState();' in js
+
+    def test_workspace_script_handles_sidebar_file_action_failures_without_silent_crashes(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert "console.error('Error renaming file from sidebar:'" in js
+        assert "console.error('Error deleting file from sidebar:'" in js
+        assert "console.error('Error restoring deleted file:'" in js
+        assert "showWorkspaceToast(error.message || 'Failed to rename file.'" in js
+        assert "showWorkspaceToast(error.message || 'Failed to delete file.'" in js
+        assert "showWorkspaceToast(error.message || `Couldn't restore ${deletedFile.filename}.`" in js
 
     def test_versions_script_handles_network_errors_during_save(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')

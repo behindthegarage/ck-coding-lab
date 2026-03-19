@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 51 - Three-pane workspace layout with AI edit review cards
+// Version 52 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -703,39 +703,49 @@ async function renameProjectFileById(fileId) {
 
     if (!action.confirmed || action.value === file.filename) return;
 
-    const data = await apiRequest(`/files/${fileId}/rename`, {
-        method: 'PUT',
-        body: { filename: action.value }
-    });
+    try {
+        const data = await apiRequest(`/files/${fileId}/rename`, {
+            method: 'PUT',
+            body: { filename: action.value }
+        });
 
-    if (!data || !data.success) {
-        showWorkspaceToast(data?.error || 'Failed to rename file.', 'error', 4200);
-        return;
+        if (!data || !data.success) {
+            showWorkspaceToast(data?.error || 'Failed to rename file.', 'error', 4200);
+            return;
+        }
+
+        moveLatestAssistantChange(previousFilename, data.file.filename);
+        await refreshWorkspaceAfterFileSave();
+        showWorkspaceToast(`Renamed to ${data.file.filename}.`, 'success');
+    } catch (error) {
+        console.error('Error renaming file from sidebar:', error);
+        showWorkspaceToast(error.message || 'Failed to rename file.', 'error', 4200);
     }
-
-    moveLatestAssistantChange(previousFilename, data.file.filename);
-    await refreshWorkspaceAfterFileSave();
-    showWorkspaceToast(`Renamed to ${data.file.filename}.`, 'success');
 }
 
 async function restoreDeletedFile(deletedFile) {
     if (!deletedFile || !deletedFile.filename) return;
 
-    const data = await apiRequest(`/projects/${projectId}/files`, {
-        method: 'POST',
-        body: {
-            filename: deletedFile.filename,
-            content: deletedFile.content || ''
+    try {
+        const data = await apiRequest(`/projects/${projectId}/files`, {
+            method: 'POST',
+            body: {
+                filename: deletedFile.filename,
+                content: deletedFile.content || ''
+            }
+        });
+
+        if (!data || !data.success) {
+            showWorkspaceToast(data?.error || `Couldn't restore ${deletedFile.filename}.`, 'error', 4200);
+            return;
         }
-    });
 
-    if (!data || !data.success) {
-        showWorkspaceToast(data?.error || `Couldn't restore ${deletedFile.filename}.`, 'error', 4200);
-        return;
+        await refreshWorkspaceAfterFileSave();
+        showWorkspaceToast(`Restored ${data.file.filename}.`, 'success');
+    } catch (error) {
+        console.error('Error restoring deleted file:', error);
+        showWorkspaceToast(error.message || `Couldn't restore ${deletedFile.filename}.`, 'error', 4200);
     }
-
-    await refreshWorkspaceAfterFileSave();
-    showWorkspaceToast(`Restored ${data.file.filename}.`, 'success');
 }
 
 async function deleteProjectFileById(fileId) {
@@ -758,24 +768,29 @@ async function deleteProjectFileById(fileId) {
 
     if (!action.confirmed) return;
 
-    const data = await apiRequest(`/files/${fileId}`, {
-        method: 'DELETE'
-    });
+    try {
+        const data = await apiRequest(`/files/${fileId}`, {
+            method: 'DELETE'
+        });
 
-    if (!data || !data.success) {
-        showWorkspaceToast(data?.error || 'Failed to delete file.', 'error', 4200);
-        return;
-    }
-
-    removeLatestAssistantChange(deletedFilename);
-    await refreshWorkspaceAfterFileSave();
-    showWorkspaceToast(`Deleted ${file.filename}.`, 'success', 8000, {
-        actionLabel: 'Undo',
-        closeOnAction: false,
-        onAction: async () => {
-            await restoreDeletedFile(data.deleted_file || file);
+        if (!data || !data.success) {
+            showWorkspaceToast(data?.error || 'Failed to delete file.', 'error', 4200);
+            return;
         }
-    });
+
+        removeLatestAssistantChange(deletedFilename);
+        await refreshWorkspaceAfterFileSave();
+        showWorkspaceToast(`Deleted ${file.filename}.`, 'success', 8000, {
+            actionLabel: 'Undo',
+            closeOnAction: false,
+            onAction: async () => {
+                await restoreDeletedFile(data.deleted_file || file);
+            }
+        });
+    } catch (error) {
+        console.error('Error deleting file from sidebar:', error);
+        showWorkspaceToast(error.message || 'Failed to delete file.', 'error', 4200);
+    }
 }
 
 async function handleFileMenuAction(action, fileId) {
