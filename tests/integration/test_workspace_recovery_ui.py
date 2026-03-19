@@ -18,7 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=49' in html
+        assert '/lab/static/js/workspace.js?v=50' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
@@ -130,6 +130,25 @@ class TestWorkspaceRecoverySurface:
         assert 'removeLatestAssistantChange(deletedFilename);' in js
         assert 'const shouldSuppressAssistantBadges = suppressAssistantChangeBadgesOnce;' in js
         assert 'clearLatestAssistantChanges();' in js
+
+    def test_workspace_script_refreshes_current_code_and_clears_stale_open_file_state_after_ai_file_changes(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'function clearMissingCurrentFileSelection()' in js
+        assert "showWorkspaceToast('The file you were viewing is no longer in this project.'" in js
+        assert 'clearMissingCurrentFileSelection();' in js
+        assert 'currentCode = project.current_code || \"\";' not in js
+        assert "currentCode = project.current_code || '';" in js
+        assert 'updateCodeDisplay();' in js
+        assert 'async function refreshFileTree() {' in js
+        assert 'if (data && data.success && data.project) {' in js
+        assert 'project = data.project;' in js
+        assert 'projectFiles = data.files || [];' in js
+        assert 'currentCode = project.current_code || \"\";' not in js
+        assert 'reconcileWorkspaceTreeState();' in js
 
     def test_versions_script_handles_network_errors_during_save(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')

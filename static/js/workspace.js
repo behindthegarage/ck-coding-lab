@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 49 - Three-pane workspace layout with AI edit review cards
+// Version 50 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -455,6 +455,37 @@ function pruneFolderStateSnapshot(snapshot, validPaths) {
     return pruned;
 }
 
+function clearMissingCurrentFileSelection() {
+    if (currentFileId === null || getProjectFileById(currentFileId)) {
+        return;
+    }
+
+    const modal = document.getElementById('file-modal');
+    const editor = document.getElementById('modal-file-editor');
+    const hadOpenModal = Boolean(modal && !modal.classList.contains('hidden'));
+
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+
+    document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+
+    if (editor) {
+        editor.value = '';
+    }
+
+    setFileModalStatus('', 'info');
+    currentFileLoadToken += 1;
+    currentFileId = null;
+    currentFileOriginalContent = '';
+    fileModalSaving = false;
+    updateFileModalSaveState();
+
+    if (hadOpenModal) {
+        showWorkspaceToast('The file you were viewing is no longer in this project.', 'info', 4200);
+    }
+}
+
 function reconcileWorkspaceTreeState() {
     const validPaths = getExistingFolderPaths(projectFiles);
     openFolderPaths = pruneFolderStateSnapshot(openFolderPaths, validPaths);
@@ -462,6 +493,8 @@ function reconcileWorkspaceTreeState() {
     if (folderStateBeforeSearch) {
         folderStateBeforeSearch = pruneFolderStateSnapshot(folderStateBeforeSearch, validPaths);
     }
+
+    clearMissingCurrentFileSelection();
 
     if (activeFileMenuId !== null && !getProjectFileById(activeFileMenuId)) {
         activeFileMenuId = null;
@@ -1993,8 +2026,12 @@ async function sendMessage(message) {
 // Refresh file tree after tool calls
 async function refreshFileTree() {
     const data = await apiRequest(`/projects/${projectId}`);
-    if (data && data.files) {
-        projectFiles = data.files;
+    if (data && data.success && data.project) {
+        project = data.project;
+        projectFiles = data.files || [];
+        currentCode = project.current_code || '';
+        reconcileWorkspaceTreeState();
+        updateCodeDisplay();
         loadFileTree();
     }
 }
