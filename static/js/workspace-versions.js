@@ -295,6 +295,7 @@ async function undoWorkspaceRecovery(versionId, label = 'your previous project s
     }
 
     await closeFileModal(true);
+    suppressAssistantChangeBadgesForNextConversationRender();
     await loadProject();
     await loadVersions();
     showWorkspaceToast(`Restored ${label}.`, 'success');
@@ -394,6 +395,7 @@ async function restoreVersion(version, buttonEl) {
         }
 
         await closeFileModal(true);
+        suppressAssistantChangeBadgesForNextConversationRender();
         await loadProject();
         await loadVersions();
         setVersionsStatus(`Restored "${description}".`, 'success');

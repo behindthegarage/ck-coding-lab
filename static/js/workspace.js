@@ -31,6 +31,7 @@ let folderStateBeforeSearch = null;
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let latestAssistantChanges = {};
+let suppressAssistantChangeBadgesOnce = false;
 let isMobile = window.innerWidth < 768;
 let isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
 
@@ -533,6 +534,36 @@ function setLatestAssistantChanges(changedFiles = []) {
     });
 }
 
+function clearLatestAssistantChanges() {
+    latestAssistantChanges = {};
+}
+
+function moveLatestAssistantChange(previousFilename, nextFilename) {
+    if (!previousFilename || !nextFilename || previousFilename === nextFilename) {
+        return;
+    }
+
+    const existing = latestAssistantChanges[previousFilename];
+    if (!existing) {
+        return;
+    }
+
+    delete latestAssistantChanges[previousFilename];
+    latestAssistantChanges[nextFilename] = existing;
+}
+
+function removeLatestAssistantChange(filename) {
+    if (!filename || !latestAssistantChanges[filename]) {
+        return;
+    }
+
+    delete latestAssistantChanges[filename];
+}
+
+function suppressAssistantChangeBadgesForNextConversationRender() {
+    suppressAssistantChangeBadgesOnce = true;
+}
+
 function getLatestAssistantChange(filename = '') {
     return latestAssistantChanges[filename] || null;
 }
@@ -569,6 +600,7 @@ function toggleFileMenu(fileId) {
 async function renameProjectFileById(fileId) {
     const file = getProjectFileById(fileId);
     if (!file) return;
+    const previousFilename = file.filename;
 
     if (String(currentFileId) === String(fileId)) {
         await renameCurrentFile();
@@ -602,6 +634,7 @@ async function renameProjectFileById(fileId) {
         return;
     }
 
+    moveLatestAssistantChange(previousFilename, data.file.filename);
     await refreshWorkspaceAfterFileSave();
     showWorkspaceToast(`Renamed to ${data.file.filename}.`, 'success');
 }
@@ -629,6 +662,7 @@ async function restoreDeletedFile(deletedFile) {
 async function deleteProjectFileById(fileId) {
     const file = getProjectFileById(fileId);
     if (!file) return;
+    const deletedFilename = file.filename;
 
     if (String(currentFileId) === String(fileId)) {
         await deleteCurrentFile();
@@ -654,6 +688,7 @@ async function deleteProjectFileById(fileId) {
         return;
     }
 
+    removeLatestAssistantChange(deletedFilename);
     await refreshWorkspaceAfterFileSave();
     showWorkspaceToast(`Deleted ${file.filename}.`, 'success', 8000, {
         actionLabel: 'Undo',
@@ -1342,6 +1377,7 @@ async function renameCurrentFile() {
 
     const file = getCurrentFileRecord();
     if (!file) return;
+    const previousFilename = file.filename;
 
     if (!(await confirmDiscardFileModalChanges('Rename this file and discard your unsaved changes?'))) {
         return;
@@ -1387,6 +1423,7 @@ async function renameCurrentFile() {
         document.getElementById('modal-filename').textContent = data.file.filename;
         currentFileOriginalContent = data.file.content || '';
         document.getElementById('modal-file-editor').value = currentFileOriginalContent;
+        moveLatestAssistantChange(previousFilename, data.file.filename);
         await refreshWorkspaceAfterFileSave();
         setFileModalStatus(`Renamed to ${data.file.filename}.`, 'success');
     } catch (error) {
@@ -1403,6 +1440,7 @@ async function deleteCurrentFile() {
 
     const file = getCurrentFileRecord();
     if (!file) return;
+    const deletedFilename = file.filename;
 
     if (!(await confirmDiscardFileModalChanges('Delete this file and discard your unsaved changes?'))) {
         return;
@@ -1433,6 +1471,7 @@ async function deleteCurrentFile() {
         }
 
         await closeFileModal(true);
+        removeLatestAssistantChange(deletedFilename);
         await refreshWorkspaceAfterFileSave();
         showWorkspaceToast(`Deleted ${file.filename}.`, 'success', 8000, {
             actionLabel: 'Undo',
@@ -1618,6 +1657,8 @@ function formatText(text) {
 // Load conversation messages
 function loadConversations() {
     const container = document.getElementById('chat-messages');
+    const shouldSuppressAssistantBadges = suppressAssistantChangeBadgesOnce;
+    suppressAssistantChangeBadgesOnce = false;
 
     if (conversations.length === 0) {
         setLatestAssistantChanges([]);
@@ -1640,7 +1681,7 @@ function loadConversations() {
             `;
         } else {
             const parsed = parseAssistantMessage(msg.content);
-            if (parsed.changedFiles && parsed.changedFiles.length > 0) {
+            if (!shouldSuppressAssistantBadges && parsed.changedFiles && parsed.changedFiles.length > 0) {
                 latestChangedFiles = parsed.changedFiles;
             }
             messageDiv.innerHTML = renderAssistantBubble(parsed, msg.model || 'kimi', msg.created_at);
@@ -1649,7 +1690,11 @@ function loadConversations() {
         container.appendChild(messageDiv);
     });
 
-    setLatestAssistantChanges(latestChangedFiles);
+    if (shouldSuppressAssistantBadges) {
+        clearLatestAssistantChanges();
+    } else {
+        setLatestAssistantChanges(latestChangedFiles);
+    }
     loadFileTree();
     container.scrollTop = container.scrollHeight;
 }

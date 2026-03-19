@@ -115,6 +115,22 @@ class TestWorkspaceRecoverySurface:
         assert 'if (activeFileMenuId !== null && !getProjectFileById(activeFileMenuId)) {' in js
         assert 'reconcileWorkspaceTreeState();' in js
 
+    def test_workspace_script_reconciles_ai_change_badges_after_manual_rename_delete_and_restore(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'let suppressAssistantChangeBadgesOnce = false;' in js
+        assert 'function clearLatestAssistantChanges()' in js
+        assert 'function moveLatestAssistantChange(previousFilename, nextFilename)' in js
+        assert 'function removeLatestAssistantChange(filename)' in js
+        assert 'function suppressAssistantChangeBadgesForNextConversationRender()' in js
+        assert 'moveLatestAssistantChange(previousFilename, data.file.filename);' in js
+        assert 'removeLatestAssistantChange(deletedFilename);' in js
+        assert 'const shouldSuppressAssistantBadges = suppressAssistantChangeBadgesOnce;' in js
+        assert 'clearLatestAssistantChanges();' in js
+
     def test_versions_script_handles_network_errors_during_save(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')
 
@@ -137,6 +153,7 @@ class TestWorkspaceRecoverySurface:
         assert 'function getVisibleWorkspaceVersions()' in js
         assert 'async function createRecoveryVersion(reason = \'Before risky workspace action\')' in js
         assert 'async function undoWorkspaceRecovery(versionId, label = \'your previous project state\')' in js
+        assert 'suppressAssistantChangeBadgesForNextConversationRender();' in js
         assert "Couldn't create a safety net, so the restore was canceled." in js
 
     def test_workspace_styles_include_toast_action_layout(self, client):
