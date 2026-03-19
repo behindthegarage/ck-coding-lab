@@ -60,8 +60,8 @@ def create_project():
         
         project_id = db.lastrowid
         
-        # Create default files for the project
-        create_default_files(db, project_id, name)
+        # Create default files for the project, including a starter code file
+        create_default_files(db, project_id, name, language=language, description=description)
         
         # Fetch the created project
         db.execute('SELECT * FROM projects WHERE id = ?', (project_id,))

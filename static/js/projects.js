@@ -1,6 +1,5 @@
 // projects.js - Project gallery functionality
 
-// Redirect if not logged in
 if (!isLoggedIn()) {
     window.location.href = '/lab/login';
 }
@@ -8,14 +7,241 @@ if (!isLoggedIn()) {
 let projects = [];
 let selectedLanguage = 'p5js';
 
-// Show admin link if user is admin
+const STARTER_PRESETS = {
+    p5js: {
+        icon: '🎮',
+        language: 'p5js',
+        title: 'Make a game',
+        name: 'Color Splash Game',
+        description: 'A playful sketch where moving the mouse creates colorful shapes and surprises.'
+    },
+    html: {
+        icon: '🌐',
+        language: 'html',
+        title: 'Build a web page',
+        name: 'My Awesome Web Page',
+        description: 'A bright page with a button, a message, and room for your own style.'
+    },
+    python: {
+        icon: '🐍',
+        language: 'python',
+        title: 'Start a Python story',
+        name: 'Hero Story Generator',
+        description: 'A simple Python script that prints a tiny story you can remix with your own ideas.'
+    }
+};
+
+const STARTER_PREVIEW = {
+    p5js: {
+        title: 'p5.js starter ready',
+        file: 'sketch.js',
+        message: 'You will land in a runnable drawing sketch so you can tweak colors, text, and shapes right away.',
+        steps: [
+            'Run the sketch and move the mouse.',
+            'Change one color, number, or message.',
+            'Add your own rule for clicks or key presses.'
+        ]
+    },
+    html: {
+        title: 'HTML starter ready',
+        file: 'index.html',
+        message: 'You will start with a real web page that already has a button and a little bit of style.',
+        steps: [
+            'Open the preview and click the button.',
+            'Rewrite the title or message.',
+            'Add a new section, image, or color theme.'
+        ]
+    },
+    python: {
+        title: 'Python starter ready',
+        file: 'main.py',
+        message: 'You will get a friendly script with printed output so you can begin changing the story immediately.',
+        steps: [
+            'Run the program once.',
+            'Rename the hero or mission.',
+            'Add one more print() line with your own idea.'
+        ]
+    }
+};
+
 const user = getCurrentUser();
-if (user && user.role === "admin") {
-    const adminLink = document.getElementById("admin-link");
-    if (adminLink) adminLink.classList.remove("hidden");
+if (user && user.role === 'admin') {
+    const adminLink = document.getElementById('admin-link');
+    if (adminLink) adminLink.classList.remove('hidden');
 }
 
-// Load projects from API
+function getLanguageIcon(lang) {
+    const icons = {
+        p5js: '🎨',
+        html: '🌐',
+        python: '🐍',
+        undecided: '💡'
+    };
+    return icons[lang] || icons.undecided;
+}
+
+function getLanguageBadgeClass(lang) {
+    const classes = {
+        p5js: 'p5js',
+        html: 'html',
+        python: 'python',
+        undecided: 'html'
+    };
+    return classes[lang] || 'html';
+}
+
+function getTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+
+    const intervals = {
+        year: 31536000,
+        month: 2592000,
+        week: 604800,
+        day: 86400,
+        hour: 3600,
+        minute: 60
+    };
+
+    for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+        const interval = Math.floor(seconds / secondsInUnit);
+        if (interval >= 1) {
+            return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
+        }
+    }
+
+    return 'just now';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showProjectMenu(projectId) {
+    console.log('Menu clicked for project:', projectId);
+}
+
+function setSelectedLanguage(language) {
+    selectedLanguage = language || 'p5js';
+    document.querySelectorAll('.lang-option').forEach((button) => {
+        button.classList.toggle('active', button.dataset.lang === selectedLanguage);
+    });
+    renderStarterPreview();
+}
+
+function renderStarterPreview() {
+    const preview = STARTER_PREVIEW[selectedLanguage] || STARTER_PREVIEW.p5js;
+    const container = document.getElementById('starter-preview');
+
+    if (!container) return;
+
+    container.innerHTML = `
+        <h3>${preview.title}</h3>
+        <p>${preview.message}</p>
+        <span class="starter-chip">Starter file: ${preview.file}</span>
+        <ul>
+            ${preview.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}
+        </ul>
+    `;
+}
+
+function applyStarterPreset(presetKey, overwriteText = true) {
+    const preset = STARTER_PRESETS[presetKey];
+    if (!preset) return;
+
+    const nameInput = document.getElementById('project-name');
+    const descInput = document.getElementById('project-desc');
+
+    setSelectedLanguage(preset.language);
+
+    if (overwriteText || !nameInput.value.trim()) {
+        nameInput.value = preset.name;
+    }
+
+    if (overwriteText || !descInput.value.trim()) {
+        descInput.value = preset.description;
+    }
+}
+
+function openNewProjectModal(presetKey = null) {
+    const modal = document.getElementById('new-project-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    document.getElementById('project-error').classList.remove('show');
+    document.getElementById('project-error').textContent = '';
+
+    if (presetKey) {
+        applyStarterPreset(presetKey, true);
+    } else {
+        renderStarterPreview();
+    }
+
+    document.getElementById('project-name').focus();
+    document.getElementById('project-name').select();
+}
+
+function closeNewProjectModal(resetText = true) {
+    const modal = document.getElementById('new-project-modal');
+    if (!modal) return;
+
+    modal.classList.add('hidden');
+    document.getElementById('project-error').classList.remove('show');
+    document.getElementById('project-error').textContent = '';
+
+    if (resetText) {
+        document.getElementById('project-name').value = '';
+        document.getElementById('project-desc').value = '';
+    }
+
+    setSelectedLanguage('p5js');
+}
+
+function renderEmptyState(container) {
+    const starterCards = Object.entries(STARTER_PRESETS).map(([key, preset]) => `
+        <button class="starter-card" type="button" data-starter="${key}">
+            <span class="starter-card-icon">${preset.icon}</span>
+            <h4>${preset.title}</h4>
+            <p>${preset.description}</p>
+            <small>Starts with ${STARTER_PREVIEW[preset.language].file}</small>
+        </button>
+    `).join('');
+
+    container.innerHTML = `
+        <section class="empty-state">
+            <div class="empty-state-hero">
+                <div class="empty-state-icon">🚀</div>
+                <h3>Start your first project</h3>
+                <p>Pick a starter below, open it, and make one tiny change right away.</p>
+            </div>
+            <div class="quick-start-grid">
+                ${starterCards}
+            </div>
+            <div class="empty-state-actions">
+                <button id="empty-state-new-project" class="btn-gradient" type="button">+ Start from my own idea</button>
+                <button id="empty-state-try-game" class="btn-secondary" type="button">Use the game starter</button>
+            </div>
+        </section>
+    `;
+
+    container.querySelectorAll('[data-starter]').forEach((button) => {
+        button.addEventListener('click', () => openNewProjectModal(button.dataset.starter));
+    });
+
+    const ownIdeaButton = document.getElementById('empty-state-new-project');
+    if (ownIdeaButton) {
+        ownIdeaButton.addEventListener('click', () => openNewProjectModal());
+    }
+
+    const gameButton = document.getElementById('empty-state-try-game');
+    if (gameButton) {
+        gameButton.addEventListener('click', () => openNewProjectModal('p5js'));
+    }
+}
+
 async function loadProjects() {
     const container = document.getElementById('projects-list');
     container.innerHTML = `
@@ -26,28 +252,21 @@ async function loadProjects() {
     `;
 
     const data = await apiRequest('/projects');
-
     if (!data) return;
 
     projects = data.projects || [];
 
     if (projects.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📁</div>
-                <h3>No projects yet!</h3>
-                <p>Click "New Project" to get started on something awesome.</p>
-            </div>
-        `;
+        renderEmptyState(container);
         return;
     }
 
-    container.innerHTML = projects.map(project => {
+    container.innerHTML = projects.map((project) => {
         const langIcon = getLanguageIcon(project.language);
         const langBadgeClass = getLanguageBadgeClass(project.language);
         const desc = project.description || 'No description';
         const timeAgo = getTimeAgo(project.updated_at);
-        
+
         return `
             <div class="project-card" data-id="${project.id}">
                 <div class="project-card-header">
@@ -62,106 +281,37 @@ async function loadProjects() {
                     <p class="project-description">${escapeHtml(desc)}</p>
                 </div>
                 <div class="project-actions">
-                    <button class="btn-open" data-id="${project.id}">
-                        🚀 Open
-                    </button>
-                    <button class="btn-menu" data-id="${project.id}">
-                        ⋮
-                    </button>
+                    <button class="btn-open" data-id="${project.id}">🚀 Open</button>
+                    <button class="btn-menu" data-id="${project.id}">⋮</button>
                 </div>
             </div>
         `;
     }).join('');
 
-    // Add click handlers for Open buttons
-    document.querySelectorAll('.btn-open').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const projectId = btn.dataset.id;
-            window.location.href = `/lab/project/${projectId}`;
+    document.querySelectorAll('.btn-open').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            window.location.href = `/lab/project/${button.dataset.id}`;
         });
     });
 
-    // Add click handlers for cards (click anywhere to open)
-    document.querySelectorAll('.project-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-            // Don't navigate if clicking buttons
-            if (e.target.closest('.btn-open') || e.target.closest('.btn-menu')) {
+    document.querySelectorAll('.project-card').forEach((card) => {
+        card.addEventListener('click', (event) => {
+            if (event.target.closest('.btn-open') || event.target.closest('.btn-menu')) {
                 return;
             }
-            const projectId = card.dataset.id;
-            window.location.href = `/lab/project/${projectId}`;
+            window.location.href = `/lab/project/${card.dataset.id}`;
         });
     });
 
-    // Menu button handlers (placeholder for future functionality)
-    document.querySelectorAll('.btn-menu').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const projectId = btn.dataset.id;
-            showProjectMenu(projectId);
+    document.querySelectorAll('.btn-menu').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            showProjectMenu(button.dataset.id);
         });
     });
 }
 
-// Get language icon
-function getLanguageIcon(lang) {
-    const icons = {
-        'p5js': '🎨',
-        'html': '🌐',
-        'python': '🐍',
-        'undecided': '💡'
-    };
-    return icons[lang] || icons['undecided'];
-}
-
-// Get language badge class
-function getLanguageBadgeClass(lang) {
-    const classes = {
-        'p5js': 'p5js',
-        'html': 'html',
-        'python': 'python',
-        'undecided': 'html'
-    };
-    return classes[lang] || 'html';
-}
-
-// Get time ago string
-function getTimeAgo(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-    
-    const intervals = {
-        year: 31536000,
-        month: 2592000,
-        week: 604800,
-        day: 86400,
-        hour: 3600,
-        minute: 60
-    };
-    
-    for (const [unit, secondsInUnit] of Object.entries(intervals)) {
-        const interval = Math.floor(seconds / secondsInUnit);
-        if (interval >= 1) {
-            return interval === 1 ? `1 ${unit} ago` : `${interval} ${unit}s ago`;
-        }
-    }
-    
-    return 'just now';
-}
-
-// Show project menu (placeholder)
-function showProjectMenu(projectId) {
-    // Future: Show dropdown menu with options like:
-    // - Rename
-    // - Duplicate
-    // - Delete
-    // - Share
-    console.log('Menu clicked for project:', projectId);
-}
-
-// Create new project
 async function createProject() {
     const nameInput = document.getElementById('project-name');
     const descInput = document.getElementById('project-desc');
@@ -188,85 +338,57 @@ async function createProject() {
 
     if (data && data.success) {
         window.location.href = `/lab/project/${data.project.id}`;
-    } else {
-        errorDiv.textContent = data?.error || 'Failed to create project. Please try again.';
-        errorDiv.classList.add('show');
-        createBtn.disabled = false;
-        createBtn.textContent = 'Start Building';
+        return;
     }
+
+    errorDiv.textContent = data?.error || 'Failed to create project. Please try again.';
+    errorDiv.classList.add('show');
+    createBtn.disabled = false;
+    createBtn.textContent = 'Start Building';
 }
 
-// Helper: Escape HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    // Show admin link if user is admin
-    const user = getCurrentUser();
-    if (user && user.role === "admin") {
-        const adminLink = document.getElementById("admin-link");
-        if (adminLink) adminLink.classList.remove("hidden");
+    const currentUser = getCurrentUser();
+    if (currentUser && currentUser.role === 'admin') {
+        const adminLink = document.getElementById('admin-link');
+        if (adminLink) adminLink.classList.remove('hidden');
     }
 
-    // Display username
     const usernameDisplay = document.getElementById('username-display');
-    if (usernameDisplay && user) {
-        usernameDisplay.textContent = user.username;
+    if (usernameDisplay && currentUser) {
+        usernameDisplay.textContent = currentUser.username;
     }
 
-    // Load projects
+    const modal = document.getElementById('new-project-modal');
+    const newProjectButton = document.getElementById('new-project-btn');
+    const cancelButton = document.getElementById('cancel-project');
+    const createButton = document.getElementById('create-project');
+    const projectNameInput = document.getElementById('project-name');
+
+    renderStarterPreview();
     loadProjects();
 
-    // New project modal
-    const modal = document.getElementById('new-project-modal');
-    const newBtn = document.getElementById('new-project-btn');
-    const cancelBtn = document.getElementById('cancel-project');
-    const createBtn = document.getElementById('create-project');
+    newProjectButton.addEventListener('click', () => openNewProjectModal());
+    cancelButton.addEventListener('click', () => closeNewProjectModal(true));
 
-    newBtn.addEventListener('click', () => {
-        modal.classList.remove('hidden');
-        document.getElementById('project-name').focus();
-    });
-
-    cancelBtn.addEventListener('click', () => {
-        modal.classList.add('hidden');
-        document.getElementById('project-name').value = '';
-        document.getElementById('project-desc').value = '';
-        document.getElementById('project-error').textContent = '';
-        document.getElementById('project-error').classList.remove('show');
-        selectedLanguage = 'p5js';
-        document.querySelectorAll('.lang-option').forEach(b => {
-            b.classList.toggle('active', b.dataset.lang === 'p5js');
-        });
-    });
-
-    // Close modal on backdrop click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            cancelBtn.click();
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            closeNewProjectModal(true);
         }
     });
 
-    // Language picker
-    document.querySelectorAll('.lang-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-            selectedLanguage = btn.dataset.lang;
-            document.querySelectorAll('.lang-option').forEach(b => {
-                b.classList.remove('active');
-            });
-            btn.classList.add('active');
-        });
+    document.querySelectorAll('.lang-option').forEach((button) => {
+        button.addEventListener('click', () => setSelectedLanguage(button.dataset.lang));
     });
 
-    createBtn.addEventListener('click', createProject);
+    document.querySelectorAll('.starter-idea').forEach((button) => {
+        button.addEventListener('click', () => applyStarterPreset(button.dataset.template, true));
+    });
 
-    // Allow Enter in name field to create
-    document.getElementById('project-name').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
+    createButton.addEventListener('click', createProject);
+
+    projectNameInput.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') {
             createProject();
         }
     });

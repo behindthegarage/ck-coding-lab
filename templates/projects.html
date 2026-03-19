@@ -6,13 +6,11 @@
     <title>My Projects - Coding Lab</title>
     <link rel="stylesheet" href="/lab/static/css/style.css?v=8">
     <style>
-        /* Projects Page Redesign */
         .projects-page {
             background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%);
             min-height: 100vh;
         }
 
-        /* Header redesign */
         .app-header {
             background: rgba(30, 41, 59, 0.95);
             backdrop-filter: blur(10px);
@@ -37,21 +35,23 @@
             color: #a78bfa;
         }
 
-        /* Projects container */
         .projects-container {
             max-width: 1400px;
             margin: 0 auto;
             padding: 2rem;
         }
 
-        /* Projects header */
         .projects-header {
             display: flex;
-            align-items: center;
+            align-items: flex-end;
             justify-content: space-between;
             margin-bottom: 2rem;
             flex-wrap: wrap;
             gap: 1rem;
+        }
+
+        .projects-heading {
+            max-width: 700px;
         }
 
         .projects-header h1 {
@@ -65,7 +65,12 @@
             color: #a78bfa;
         }
 
-        /* New Project Button */
+        .projects-subtitle {
+            margin: 0.75rem 0 0;
+            color: #cbd5e1;
+            line-height: 1.6;
+        }
+
         .btn-gradient {
             padding: 0.875rem 1.5rem;
             background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
@@ -77,8 +82,9 @@
             cursor: pointer;
             transition: all 0.2s ease;
             box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4);
-            display: flex;
+            display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 0.5rem;
         }
 
@@ -92,14 +98,29 @@
             transform: translateY(0);
         }
 
-        /* Projects Grid */
+        .btn-secondary {
+            padding: 0.875rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(15, 23, 42, 0.45);
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            border-color: rgba(167, 139, 250, 0.5);
+            color: #fff;
+        }
+
         .projects-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
             gap: 1.5rem;
         }
 
-        /* Project Card */
         .project-card {
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(10px);
@@ -167,7 +188,6 @@
             color: #94a3b8;
         }
 
-        /* Language Badge */
         .lang-badge {
             padding: 0.375rem 0.75rem;
             border-radius: 20px;
@@ -195,7 +215,6 @@
             border: 1px solid rgba(16, 185, 129, 0.3);
         }
 
-        /* Project Body */
         .project-body {
             padding: 1.25rem;
         }
@@ -211,7 +230,6 @@
             overflow: hidden;
         }
 
-        /* Project Actions */
         .project-actions {
             padding: 1rem 1.25rem;
             display: flex;
@@ -258,26 +276,96 @@
             color: #e2e8f0;
         }
 
-        /* Empty state */
         .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
+            grid-column: 1 / -1;
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(139, 92, 246, 0.18);
+            border-radius: 24px;
+            padding: 2rem;
             color: #94a3b8;
+        }
+
+        .empty-state-hero {
+            text-align: center;
+            margin-bottom: 2rem;
         }
 
         .empty-state-icon {
             font-size: 4rem;
             margin-bottom: 1rem;
-            opacity: 0.5;
         }
 
         .empty-state h3 {
-            font-size: 1.5rem;
+            font-size: 1.75rem;
             color: #f8fafc;
-            margin: 0 0 0.5rem 0;
+            margin: 0 0 0.75rem 0;
         }
 
-        /* Loading state */
+        .empty-state p {
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        .quick-start-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0 1.5rem;
+        }
+
+        .starter-card {
+            width: 100%;
+            text-align: left;
+            padding: 1.25rem;
+            border-radius: 18px;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: rgba(30, 41, 59, 0.85);
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .starter-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(167, 139, 250, 0.45);
+            box-shadow: 0 20px 30px -18px rgba(139, 92, 246, 0.55);
+        }
+
+        .starter-card h4 {
+            margin: 0.85rem 0 0.45rem;
+            color: #f8fafc;
+            font-size: 1.05rem;
+        }
+
+        .starter-card p {
+            color: #cbd5e1;
+            font-size: 0.95rem;
+            min-height: 3rem;
+        }
+
+        .starter-card small {
+            color: #a78bfa;
+            font-weight: 600;
+        }
+
+        .starter-card-icon {
+            width: 52px;
+            height: 52px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            font-size: 1.6rem;
+            background: rgba(139, 92, 246, 0.14);
+        }
+
+        .empty-state-actions {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
         .loading-state {
             text-align: center;
             padding: 4rem 2rem;
@@ -298,13 +386,9 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Modal Redesign */
         .modal {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(4px);
             display: flex;
@@ -323,7 +407,7 @@
             border: 1px solid rgba(139, 92, 246, 0.2);
             border-radius: 20px;
             width: 100%;
-            max-width: 480px;
+            max-width: 560px;
             max-height: 90vh;
             overflow: hidden;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -338,6 +422,12 @@
             margin: 0;
             font-size: 1.5rem;
             color: #f8fafc;
+        }
+
+        .modal-header p {
+            margin: 0.5rem 0 0;
+            color: #cbd5e1;
+            line-height: 1.5;
         }
 
         .modal-body {
@@ -367,6 +457,7 @@
             color: #f8fafc;
             font-size: 1rem;
             transition: all 0.2s;
+            box-sizing: border-box;
         }
 
         .form-group input:focus,
@@ -381,7 +472,27 @@
             resize: vertical;
         }
 
-        /* Language Selector */
+        .starter-ideas {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .starter-idea {
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            background: rgba(15, 23, 42, 0.55);
+            color: #e2e8f0;
+            border-radius: 999px;
+            padding: 0.65rem 0.95rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .starter-idea:hover {
+            border-color: rgba(167, 139, 250, 0.4);
+        }
+
         .language-selector {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -452,7 +563,49 @@
             color: #34d399;
         }
 
-        /* Modal Actions */
+        .starter-preview {
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .starter-preview h3 {
+            margin: 0 0 0.35rem;
+            color: #f8fafc;
+            font-size: 1rem;
+        }
+
+        .starter-preview p {
+            margin: 0;
+            color: #cbd5e1;
+            line-height: 1.55;
+        }
+
+        .starter-preview ul {
+            margin: 0.85rem 0 0;
+            padding-left: 1.2rem;
+            color: #cbd5e1;
+        }
+
+        .starter-preview li + li {
+            margin-top: 0.45rem;
+        }
+
+        .starter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-top: 0.75rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(139, 92, 246, 0.12);
+            color: #c4b5fd;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
         .modal-actions {
             padding: 1rem 1.5rem 1.5rem;
             display: flex;
@@ -498,7 +651,6 @@
             transform: none;
         }
 
-        /* Error in modal */
         .modal-error {
             background: rgba(239, 68, 68, 0.1);
             border: 1px solid rgba(239, 68, 68, 0.3);
@@ -514,7 +666,6 @@
             display: block;
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
             .projects-container {
                 padding: 1rem;
@@ -529,12 +680,14 @@
                 font-size: 1.5rem;
             }
 
-            .projects-grid {
+            .projects-grid,
+            .quick-start-grid,
+            .language-selector {
                 grid-template-columns: 1fr;
             }
 
-            .language-selector {
-                grid-template-columns: 1fr;
+            .modal-actions {
+                flex-direction: column;
             }
         }
     </style>
@@ -550,15 +703,18 @@
             <button id="logout-btn" class="btn-small">Log Out</button>
         </div>
     </header>
-    
+
     <main class="projects-container">
         <div class="projects-header">
-            <h1>My <span>Projects</span></h1>
+            <div class="projects-heading">
+                <h1>My <span>Projects</span></h1>
+                <p class="projects-subtitle">Pick a starter, make one tiny change, and keep leveling up from there.</p>
+            </div>
             <button id="new-project-btn" class="btn-gradient">
                 <span>+</span> New Project
             </button>
         </div>
-        
+
         <div id="projects-list" class="projects-grid">
             <div class="loading-state">
                 <div class="spinner"></div>
@@ -566,15 +722,23 @@
             </div>
         </div>
     </main>
-    
-    <!-- New Project Modal -->
+
     <div id="new-project-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Create New Project</h2>
+                <p>Choose a starter, then change one thing right away so the project feels like yours.</p>
             </div>
-            
+
             <div class="modal-body">
+                <div class="starter-ideas" id="starter-ideas">
+                    <button type="button" class="starter-idea" data-template="p5js">🎮 Make a game</button>
+                    <button type="button" class="starter-idea" data-template="html">🌐 Build a web page</button>
+                    <button type="button" class="starter-idea" data-template="python">🐍 Start a Python story</button>
+                </div>
+
+                <div id="starter-preview" class="starter-preview"></div>
+
                 <div class="form-group">
                     <label>Choose a Language</label>
                     <div class="language-selector">
@@ -592,28 +756,28 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="project-name">Project Name</label>
                     <input type="text" id="project-name" placeholder="My Awesome Game" maxlength="100">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="project-desc">What do you want to build?</label>
                     <textarea id="project-desc" placeholder="Describe your idea... a game, a website, a tool? We'll figure out the best way to build it together." maxlength="1000" rows="3"></textarea>
                 </div>
-                
+
                 <div id="project-error" class="modal-error"></div>
             </div>
-            
+
             <div class="modal-actions">
                 <button id="cancel-project" class="btn-cancel">Cancel</button>
                 <button id="create-project" class="btn-create">Start Building</button>
             </div>
         </div>
     </div>
-    
+
     <script src="/lab/static/js/auth.js?v=2"></script>
-    <script src="/lab/static/js/projects.js?v=7"></script>
+    <script src="/lab/static/js/projects.js?v=8"></script>
 </body>
 </html>

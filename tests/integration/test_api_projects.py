@@ -129,6 +129,39 @@ class TestCreateProjectAPI:
         
         assert response.status_code == 201
         assert response.get_json()['project']['language'] == 'python'
+
+    @pytest.mark.parametrize(
+        ('language', 'starter_filename', 'starter_snippet'),
+        [
+            ('p5js', 'sketch.js', 'function setup()'),
+            ('html', 'index.html', '<!DOCTYPE html>'),
+            ('python', 'main.py', 'Welcome to your first Python project!'),
+        ],
+    )
+    def test_create_project_seeds_runnable_starter_file(self, client, auth_headers, language, starter_filename, starter_snippet):
+        """New projects should open with a friendly starter file instead of a blank editor."""
+        response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={
+                'name': f'{language} starter',
+                'description': 'Help me get going fast',
+                'language': language,
+            },
+        )
+
+        assert response.status_code == 201
+        project = response.get_json()['project']
+        assert project['language'] == language
+        assert starter_snippet in (project.get('current_code') or '')
+
+        project_response = client.get(f"/api/projects/{project['id']}", headers=auth_headers)
+        assert project_response.status_code == 200
+        files = project_response.get_json()['files']
+        filenames = [file['filename'] for file in files]
+
+        assert starter_filename in filenames
+        assert 'todo.md' in filenames
     
     def test_create_project_unauthorized(self, client):
         """Test creating project without authentication."""

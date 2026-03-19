@@ -9,7 +9,6 @@ Provides endpoints for:
 
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
-from datetime import datetime
 
 from database import get_db, row_to_dict
 from auth import validate_session
@@ -453,135 +452,34 @@ def get_all_files_content(project_id):
 @file_bp.route('/projects/<int:project_id>/files/bulk', methods=['POST'])
 @require_auth
 def create_default_files(project_id):
-    """Create default files for a new project (design.md, architecture.md, todo.md, notes.md)."""
+    """Create default planning docs plus a starter file for a project."""
     user_id = g.current_user['id']
-    
+
     if not verify_project_access(project_id, user_id):
         return jsonify({"success": False, "error": "Project not found"}), 404
-    
-    # Get project name for templates
+
     with get_db() as db:
-        db.execute('SELECT name FROM projects WHERE id = ?', (project_id,))
+        db.execute('SELECT name, language, description FROM projects WHERE id = ?', (project_id,))
         row = db.fetchone()
         project_name = row['name'] if row else 'New Project'
-    
-    # Default file templates
-    default_files = {
-        'design.md': f"""# Design: {project_name}
+        language = row['language'] if row else 'undecided'
+        description = row['description'] if row else ''
 
-## Elevator Pitch
+        created_files = create_project_default_files(
+            db,
+            project_id,
+            project_name,
+            language=language,
+            description=description,
+        )
 
-[One sentence describing what this project does]
+    created_count = len(created_files)
 
-## Core Features
-
-- Feature 1
-- Feature 2
-- Feature 3
-
-## Stretch Goals
-
-- [ ] Stretch feature 1
-- [ ] Stretch feature 2
-
-## Open Questions
-
-- What technology stack should we use?
-- What's the simplest version we can build first?
-""",
-        'architecture.md': f"""# Architecture: {project_name}
-
-## Technology Stack
-
-- Language: [p5.js / HTML/CSS/JS / Python]
-- Key Libraries: 
-- Target Platform: [Browser / Desktop / Mobile]
-
-## File Structure
-
-```
-{project_name}/
-├── main.js (or main.py, index.html)
-└── [other files]
-```
-
-## Key Components
-
-1. **Component 1** - Description
-2. **Component 2** - Description
-
-## Dependencies
-
-- None yet
-
-## Notes
-
-[Any technical decisions or constraints]
-""",
-        'todo.md': f"""# Todo: {project_name}
-
-## Current
-
-- [ ] Initial setup
-- [ ] Define core features
-
-## Completed
-
-_None yet_
-
-## Blocked
-
-_None yet_
-
-## Ideas
-
-- Future improvement 1
-- Future improvement 2
-""",
-        'notes.md': f"""# Notes: {project_name}
-
-## Session Log
-
-### {datetime.now().strftime('%Y-%m-%d')}
-
-- Project created
-- Initial ideas:
-
-## Research
-
-[Links, references, things to remember]
-
-## Questions to Ask
-
-- 
-
-## Decisions Made
-
-- 
-"""
-    }
-    
-    created_files = []
-    
-    with get_db() as db:
-        for filename, content in default_files.items():
-            try:
-                db.execute('''
-                    INSERT INTO project_files (project_id, filename, content)
-                    VALUES (?, ?, ?)
-                ''', (project_id, filename, content))
-                created_files.append(filename)
-            except Exception as e:
-                if "UNIQUE constraint failed" in str(e):
-                    # File already exists, skip
-                    pass
-                else:
-                    raise
-    
     return jsonify({
         "success": True,
         "created": created_files,
-        "message": f"Created {len(created_files)} default files"
+        "created_count": created_count,
+        "message": f"Created {created_count} starter files"
     })
 
 
