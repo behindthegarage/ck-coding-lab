@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 52 - Three-pane workspace layout with AI edit review cards
+// Version 53 - Three-pane workspace layout with AI edit review cards + launch intents
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -8,6 +8,7 @@ if (!isLoggedIn()) {
 
 // Get project ID from URL
 const projectId = window.location.pathname.split('/').pop();
+const workspaceLaunchParams = new URLSearchParams(window.location.search);
 
 // State
 let project = null;
@@ -271,6 +272,19 @@ function renderWorkspaceLoadFailure(message, { redirectToProjects = false } = {}
     }
 }
 
+function consumeWorkspaceLaunchIntent() {
+    if (!workspaceLaunchParams || !workspaceLaunchParams.toString()) return;
+
+    const modal = workspaceLaunchParams.get('modal');
+    if (modal === 'versions' && typeof openVersionsModal === 'function') {
+        openVersionsModal();
+        workspaceLaunchParams.delete('modal');
+        const nextQuery = workspaceLaunchParams.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
+        window.history.replaceState({}, '', nextUrl);
+    }
+}
+
 // Load project data
 async function loadProject() {
     let data;
@@ -315,6 +329,8 @@ async function loadProject() {
     if (project.language !== 'python') {
         runPreview();
     }
+
+    consumeWorkspaceLaunchIntent();
 }
 
 function updateFileSearchUI() {

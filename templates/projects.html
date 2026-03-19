@@ -9,10 +9,11 @@
         .projects-page {
             background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%);
             min-height: 100vh;
+            color: #e2e8f0;
         }
 
         .app-header {
-            background: rgba(30, 41, 59, 0.95);
+            background: rgba(15, 23, 42, 0.92);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(139, 92, 246, 0.2);
             padding: 1rem 2rem;
@@ -25,40 +26,49 @@
             color: #f8fafc;
             text-decoration: none;
             font-weight: 700;
-            font-size: 1.25rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            font-size: 1.15rem;
         }
 
-        .app-header .logo a:hover {
-            color: #a78bfa;
+        .header-links {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .header-link {
+            color: #c4b5fd;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .header-link.hidden {
+            display: none;
         }
 
         .projects-container {
-            max-width: 1400px;
+            max-width: 1480px;
             margin: 0 auto;
             padding: 2rem;
         }
 
         .projects-header {
             display: flex;
-            align-items: flex-end;
             justify-content: space-between;
-            margin-bottom: 2rem;
+            align-items: flex-end;
+            gap: 1.5rem;
             flex-wrap: wrap;
-            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .projects-heading {
-            max-width: 700px;
+            max-width: 760px;
         }
 
         .projects-header h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #f8fafc;
             margin: 0;
+            font-size: 2rem;
+            color: #f8fafc;
         }
 
         .projects-header h1 span {
@@ -71,246 +81,453 @@
             line-height: 1.6;
         }
 
-        .btn-gradient {
-            padding: 0.875rem 1.5rem;
-            background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
-            border: none;
+        .projects-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-gradient,
+        .btn-secondary,
+        .btn-quiet,
+        .btn-danger {
             border-radius: 12px;
-            color: white;
-            font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
-            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
+        }
+
+        .btn-gradient {
+            padding: 0.85rem 1.35rem;
+            background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
         }
 
         .btn-gradient:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
-            background: linear-gradient(135deg, #9333ea 0%, #db2777 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(139, 92, 246, 0.45);
         }
 
-        .btn-gradient:active {
-            transform: translateY(0);
-        }
-
-        .btn-secondary {
-            padding: 0.875rem 1.25rem;
-            border-radius: 12px;
-            border: 1px solid rgba(148, 163, 184, 0.35);
-            background: rgba(15, 23, 42, 0.45);
+        .btn-secondary,
+        .btn-quiet,
+        .btn-danger {
+            padding: 0.75rem 1rem;
+            background: rgba(15, 23, 42, 0.48);
             color: #e2e8f0;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            border: 1px solid rgba(148, 163, 184, 0.28);
         }
 
-        .btn-secondary:hover {
+        .btn-secondary:hover,
+        .btn-quiet:hover {
             border-color: rgba(167, 139, 250, 0.5);
             color: #fff;
         }
 
-        .projects-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 1.5rem;
+        .btn-danger {
+            border-color: rgba(248, 113, 113, 0.3);
+            color: #fecaca;
         }
 
-        .project-card {
-            background: rgba(30, 41, 59, 0.8);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(71, 85, 105, 0.5);
+        .btn-danger:hover {
+            border-color: rgba(248, 113, 113, 0.55);
+            color: #fff;
+        }
+
+        .projects-banner {
+            display: none;
+            margin-bottom: 1rem;
+            padding: 1rem 1.1rem;
             border-radius: 16px;
-            overflow: hidden;
-            transition: all 0.3s ease;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(15, 23, 42, 0.65);
+            color: #e2e8f0;
+        }
+
+        .projects-banner.show {
+            display: block;
+        }
+
+        .projects-banner.success {
+            border-color: rgba(52, 211, 153, 0.35);
+            color: #d1fae5;
+        }
+
+        .projects-banner.error {
+            border-color: rgba(248, 113, 113, 0.35);
+            color: #fecaca;
+        }
+
+        .projects-banner.info {
+            border-color: rgba(96, 165, 250, 0.35);
+            color: #dbeafe;
+        }
+
+        .oversight-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .summary-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(71, 85, 105, 0.45);
+            border-radius: 18px;
+            padding: 1rem 1.1rem;
+        }
+
+        .summary-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+        }
+
+        .summary-value {
+            display: block;
+            margin-top: 0.45rem;
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #f8fafc;
+        }
+
+        .summary-note {
+            display: block;
+            margin-top: 0.35rem;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
+        .projects-controls {
+            background: rgba(15, 23, 42, 0.58);
+            border: 1px solid rgba(71, 85, 105, 0.42);
+            border-radius: 22px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .projects-controls-top,
+        .projects-controls-bottom {
+            display: flex;
+            gap: 0.85rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .projects-controls-bottom {
+            margin-top: 0.85rem;
+            justify-content: space-between;
+        }
+
+        .projects-search {
+            flex: 1 1 280px;
+            min-width: 240px;
+        }
+
+        .projects-search input,
+        .projects-controls select,
+        .modal-content input,
+        .modal-content textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0.82rem 0.95rem;
+            border-radius: 12px;
+            border: 1px solid rgba(71, 85, 105, 0.55);
+            background: rgba(2, 6, 23, 0.55);
+            color: #f8fafc;
+        }
+
+        .projects-controls label,
+        .filter-field {
+            display: grid;
+            gap: 0.35rem;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
+        .filter-field {
+            min-width: 150px;
+        }
+
+        .quick-filter-row {
+            display: flex;
+            gap: 0.65rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-filter-chip {
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: rgba(15, 23, 42, 0.55);
+            color: #e2e8f0;
+            padding: 0.55rem 0.9rem;
+            font-weight: 600;
             cursor: pointer;
         }
 
+        .quick-filter-chip.active {
+            border-color: rgba(167, 139, 250, 0.55);
+            background: rgba(139, 92, 246, 0.14);
+            color: #ddd6fe;
+        }
+
+        .projects-results-meta {
+            color: #94a3b8;
+            font-size: 0.92rem;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .project-card {
+            background: rgba(30, 41, 59, 0.82);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 20px;
+            padding: 1.15rem;
+            display: grid;
+            gap: 0.95rem;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
         .project-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px -10px rgba(139, 92, 246, 0.3);
+            transform: translateY(-3px);
             border-color: rgba(139, 92, 246, 0.4);
+            box-shadow: 0 18px 38px -22px rgba(139, 92, 246, 0.6);
+        }
+
+        .project-card.archived {
+            opacity: 0.85;
+            border-style: dashed;
         }
 
         .project-card-header {
-            padding: 1.25rem;
             display: flex;
             align-items: flex-start;
-            gap: 1rem;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            gap: 0.9rem;
         }
 
         .project-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            display: flex;
+            width: 50px;
+            height: 50px;
+            border-radius: 14px;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
             flex-shrink: 0;
         }
 
-        .project-icon.p5js {
-            background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-        }
-
-        .project-icon.html {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        }
-
-        .project-icon.python {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
+        .project-icon.p5js { background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); }
+        .project-icon.html { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .project-icon.python { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .project-icon.undecided { background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); }
 
         .project-title-group {
             flex: 1;
             min-width: 0;
         }
 
+        .project-title-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
         .project-title-group h3 {
-            margin: 0 0 0.25rem 0;
-            font-size: 1.125rem;
-            font-weight: 600;
+            margin: 0;
             color: #f8fafc;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size: 1.1rem;
         }
 
-        .project-meta {
-            font-size: 0.8rem;
+        .project-owner {
+            margin-top: 0.28rem;
+            color: #cbd5e1;
+            font-size: 0.92rem;
+        }
+
+        .project-meta-line {
+            margin-top: 0.28rem;
             color: #94a3b8;
+            font-size: 0.86rem;
         }
 
-        .lang-badge {
-            padding: 0.375rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .chip-row,
+        .project-stats-row,
+        .project-attention-list {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
-        .lang-badge.p5js {
-            background: rgba(245, 158, 11, 0.15);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.3);
+        .lang-badge,
+        .status-badge,
+        .meta-chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.36rem 0.72rem;
+            font-size: 0.77rem;
+            font-weight: 700;
+            line-height: 1;
         }
 
-        .lang-badge.html {
-            background: rgba(59, 130, 246, 0.15);
-            color: #60a5fa;
-            border: 1px solid rgba(59, 130, 246, 0.3);
-        }
+        .lang-badge.p5js { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
+        .lang-badge.html { background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.25); }
+        .lang-badge.python { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.25); }
+        .lang-badge.undecided { background: rgba(139, 92, 246, 0.15); color: #ddd6fe; border: 1px solid rgba(139, 92, 246, 0.25); }
 
-        .lang-badge.python {
-            background: rgba(16, 185, 129, 0.15);
-            color: #34d399;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
+        .status-badge.active { background: rgba(34, 197, 94, 0.14); color: #bbf7d0; border: 1px solid rgba(34, 197, 94, 0.22); }
+        .status-badge.attention { background: rgba(251, 191, 36, 0.16); color: #fde68a; border: 1px solid rgba(251, 191, 36, 0.24); }
+        .status-badge.archived { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.24); }
+        .status-badge.recent { background: rgba(96, 165, 250, 0.15); color: #bfdbfe; border: 1px solid rgba(96, 165, 250, 0.25); }
 
-        .project-body {
-            padding: 1.25rem;
+        .meta-chip {
+            background: rgba(15, 23, 42, 0.55);
+            color: #cbd5e1;
+            border: 1px solid rgba(71, 85, 105, 0.45);
         }
 
         .project-description {
-            color: #94a3b8;
-            font-size: 0.95rem;
-            line-height: 1.5;
             margin: 0;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            color: #cbd5e1;
+            line-height: 1.55;
         }
 
-        .project-actions {
-            padding: 1rem 1.25rem;
+        .project-activity-box {
+            background: rgba(15, 23, 42, 0.48);
+            border: 1px solid rgba(71, 85, 105, 0.36);
+            border-radius: 16px;
+            padding: 0.9rem;
+            display: grid;
+            gap: 0.65rem;
+        }
+
+        .project-activity-line {
+            display: grid;
+            gap: 0.25rem;
+        }
+
+        .project-activity-line strong {
+            color: #f8fafc;
+            font-size: 0.85rem;
+        }
+
+        .project-activity-line span {
+            color: #cbd5e1;
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .project-attention-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .project-attention-list li {
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(251, 191, 36, 0.12);
+            color: #fde68a;
+            border: 1px solid rgba(251, 191, 36, 0.2);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .project-actions-primary,
+        .project-tools-actions {
             display: flex;
-            gap: 0.75rem;
-            background: rgba(15, 23, 42, 0.4);
-            border-top: 1px solid rgba(71, 85, 105, 0.3);
+            gap: 0.65rem;
+            flex-wrap: wrap;
         }
 
         .btn-open {
-            flex: 1;
-            padding: 0.625rem 1rem;
-            background: rgba(139, 92, 246, 0.15);
-            border: 1px solid rgba(139, 92, 246, 0.3);
-            border-radius: 8px;
-            color: #a78bfa;
-            font-size: 0.875rem;
-            font-weight: 600;
+            flex: 1 1 160px;
+            padding: 0.8rem 1rem;
+            border: 1px solid rgba(139, 92, 246, 0.35);
+            background: rgba(139, 92, 246, 0.16);
+            color: #ddd6fe;
+            border-radius: 12px;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
         }
 
-        .btn-open:hover {
-            background: rgba(139, 92, 246, 0.25);
-            border-color: rgba(139, 92, 246, 0.5);
+        .project-tools {
+            border-radius: 16px;
+            border: 1px solid rgba(71, 85, 105, 0.34);
+            background: rgba(15, 23, 42, 0.34);
+            overflow: hidden;
         }
 
-        .btn-menu {
-            padding: 0.625rem 1rem;
-            background: rgba(71, 85, 105, 0.3);
-            border: 1px solid rgba(71, 85, 105, 0.5);
-            border-radius: 8px;
+        .project-tools summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 0.9rem 1rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .project-tools summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .project-tools-copy {
             color: #94a3b8;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: all 0.2s;
+            font-weight: 500;
+            font-size: 0.86rem;
+            margin-left: 0.45rem;
         }
 
-        .btn-menu:hover {
-            background: rgba(71, 85, 105, 0.5);
-            color: #e2e8f0;
+        .project-tools-body {
+            padding: 0 1rem 1rem;
+            display: grid;
+            gap: 0.75rem;
         }
 
-        .empty-state {
+        .project-tools-note {
+            color: #cbd5e1;
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .empty-state,
+        .loading-state {
             grid-column: 1 / -1;
             background: rgba(15, 23, 42, 0.55);
             border: 1px solid rgba(139, 92, 246, 0.18);
             border-radius: 24px;
             padding: 2rem;
             color: #94a3b8;
-        }
-
-        .empty-state-hero {
             text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .empty-state-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
         }
 
         .empty-state h3 {
-            font-size: 1.75rem;
+            margin: 0.5rem 0 0.75rem;
             color: #f8fafc;
-            margin: 0 0 0.75rem 0;
+            font-size: 1.75rem;
         }
 
-        .empty-state p {
+        .empty-state p,
+        .loading-state p {
             margin: 0;
-            line-height: 1.6;
+            line-height: 1.55;
+        }
+
+        .empty-state-icon {
+            font-size: 3.6rem;
         }
 
         .quick-start-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 1rem;
-            margin: 2rem 0 1.5rem;
+            margin: 1.75rem 0;
         }
 
         .starter-card {
@@ -331,6 +548,17 @@
             box-shadow: 0 20px 30px -18px rgba(139, 92, 246, 0.55);
         }
 
+        .starter-card-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: rgba(139, 92, 246, 0.14);
+            font-size: 1.6rem;
+        }
+
         .starter-card h4 {
             margin: 0.85rem 0 0.45rem;
             color: #f8fafc;
@@ -339,37 +567,12 @@
 
         .starter-card p {
             color: #cbd5e1;
-            font-size: 0.95rem;
             min-height: 3rem;
         }
 
         .starter-card small {
-            color: #a78bfa;
-            font-weight: 600;
-        }
-
-        .starter-card-icon {
-            width: 52px;
-            height: 52px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 14px;
-            font-size: 1.6rem;
-            background: rgba(139, 92, 246, 0.14);
-        }
-
-        .empty-state-actions {
-            display: flex;
-            justify-content: center;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-
-        .loading-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: #94a3b8;
+            color: #c4b5fd;
+            font-weight: 700;
         }
 
         .spinner {
@@ -389,7 +592,7 @@
         .modal {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.78);
             backdrop-filter: blur(4px);
             display: flex;
             align-items: center;
@@ -403,80 +606,56 @@
         }
 
         .modal-content {
-            background: rgba(30, 41, 59, 0.98);
-            border: 1px solid rgba(139, 92, 246, 0.2);
-            border-radius: 20px;
             width: 100%;
-            max-width: 560px;
-            max-height: 90vh;
+            max-width: 580px;
+            border-radius: 22px;
+            background: rgba(15, 23, 42, 0.97);
+            border: 1px solid rgba(139, 92, 246, 0.24);
+            box-shadow: 0 30px 60px -18px rgba(0, 0, 0, 0.65);
             overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
         .modal-header {
-            padding: 1.5rem;
+            padding: 1.4rem 1.5rem 1rem;
             border-bottom: 1px solid rgba(71, 85, 105, 0.3);
         }
 
-        .modal-header h2 {
+        .modal-header h2,
+        .modal-header h3 {
             margin: 0;
-            font-size: 1.5rem;
             color: #f8fafc;
         }
 
         .modal-header p {
-            margin: 0.5rem 0 0;
+            margin: 0.55rem 0 0;
             color: #cbd5e1;
-            line-height: 1.5;
+            line-height: 1.55;
         }
 
         .modal-body {
-            padding: 1.5rem;
+            padding: 1.4rem 1.5rem;
+            display: grid;
+            gap: 1.1rem;
+            max-height: 70vh;
             overflow-y: auto;
         }
 
         .form-group {
-            margin-bottom: 1.5rem;
+            display: grid;
+            gap: 0.55rem;
         }
 
         .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #94a3b8;
-        }
-
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.875rem 1rem;
-            background: rgba(15, 23, 42, 0.8);
-            border: 2px solid rgba(71, 85, 105, 0.5);
-            border-radius: 10px;
-            color: #f8fafc;
-            font-size: 1rem;
-            transition: all 0.2s;
-            box-sizing: border-box;
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #8b5cf6;
-            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
-        }
-
-        .form-group textarea {
-            min-height: 100px;
-            resize: vertical;
+            color: #cbd5e1;
+            font-size: 0.92rem;
+            font-weight: 600;
         }
 
         .starter-ideas {
             display: flex;
             flex-wrap: wrap;
             gap: 0.75rem;
-            margin-bottom: 1rem;
+            margin-bottom: 0.25rem;
         }
 
         .starter-idea {
@@ -486,11 +665,7 @@
             border-radius: 999px;
             padding: 0.65rem 0.95rem;
             cursor: pointer;
-            font-weight: 600;
-        }
-
-        .starter-idea:hover {
-            border-color: rgba(167, 139, 250, 0.4);
+            font-weight: 700;
         }
 
         .language-selector {
@@ -501,17 +676,11 @@
 
         .lang-option {
             padding: 1rem;
-            background: rgba(15, 23, 42, 0.5);
-            border: 2px solid rgba(71, 85, 105, 0.3);
-            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.45);
+            border: 2px solid rgba(71, 85, 105, 0.35);
+            border-radius: 14px;
             cursor: pointer;
             text-align: center;
-            transition: all 0.2s;
-        }
-
-        .lang-option:hover {
-            border-color: rgba(139, 92, 246, 0.3);
-            background: rgba(139, 92, 246, 0.05);
         }
 
         .lang-option.active {
@@ -520,47 +689,15 @@
         }
 
         .lang-option .lang-icon {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
             display: block;
+            margin-bottom: 0.45rem;
+            font-size: 2rem;
         }
 
         .lang-option .lang-name {
-            font-weight: 600;
-            font-size: 0.875rem;
             color: #f8fafc;
-            display: block;
-        }
-
-        .lang-option.active .lang-name {
-            color: #a78bfa;
-        }
-
-        .lang-option.p5js.active {
-            border-color: #f59e0b;
-            background: rgba(245, 158, 11, 0.1);
-        }
-
-        .lang-option.p5js.active .lang-name {
-            color: #fbbf24;
-        }
-
-        .lang-option.html.active {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.1);
-        }
-
-        .lang-option.html.active .lang-name {
-            color: #60a5fa;
-        }
-
-        .lang-option.python.active {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.1);
-        }
-
-        .lang-option.python.active .lang-name {
-            color: #34d399;
+            font-weight: 700;
+            font-size: 0.9rem;
         }
 
         .starter-preview {
@@ -568,7 +705,6 @@
             border: 1px solid rgba(139, 92, 246, 0.2);
             border-radius: 16px;
             padding: 1rem;
-            margin-bottom: 1.25rem;
         }
 
         .starter-preview h3 {
@@ -585,7 +721,7 @@
 
         .starter-preview ul {
             margin: 0.85rem 0 0;
-            padding-left: 1.2rem;
+            padding-left: 1.15rem;
             color: #cbd5e1;
         }
 
@@ -596,7 +732,6 @@
         .starter-chip {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
             margin-top: 0.75rem;
             padding: 0.35rem 0.7rem;
             border-radius: 999px;
@@ -607,86 +742,65 @@
         }
 
         .modal-actions {
-            padding: 1rem 1.5rem 1.5rem;
             display: flex;
             gap: 0.75rem;
+            padding: 0 1.5rem 1.4rem;
         }
 
         .modal-actions button {
             flex: 1;
-            padding: 0.875rem 1.5rem;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-cancel {
-            background: rgba(71, 85, 105, 0.3);
-            color: #94a3b8;
-            border: 1px solid rgba(71, 85, 105, 0.5);
-        }
-
-        .btn-cancel:hover {
-            background: rgba(71, 85, 105, 0.5);
-            color: #e2e8f0;
-        }
-
-        .btn-create {
-            background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
-            color: white;
-            box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3);
-        }
-
-        .btn-create:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
-        }
-
-        .btn-create:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+            padding: 0.9rem 1rem;
         }
 
         .modal-error {
+            display: none;
             background: rgba(239, 68, 68, 0.1);
             border: 1px solid rgba(239, 68, 68, 0.3);
             color: #fca5a5;
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            margin-top: 1rem;
-            display: none;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            margin-top: 0.35rem;
         }
 
         .modal-error.show {
             display: block;
         }
 
-        @media (max-width: 768px) {
+        .action-modal-message {
+            color: #cbd5e1;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 900px) {
             .projects-container {
                 padding: 1rem;
             }
 
-            .projects-header {
-                flex-direction: column;
-                align-items: stretch;
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .app-header {
+                padding: 1rem;
             }
 
             .projects-header h1 {
-                font-size: 1.5rem;
+                font-size: 1.55rem;
             }
 
-            .projects-grid,
-            .quick-start-grid,
             .language-selector {
                 grid-template-columns: 1fr;
             }
 
-            .modal-actions {
+            .modal-actions,
+            .project-actions-primary,
+            .project-tools-actions {
                 flex-direction: column;
             }
         }
@@ -695,89 +809,169 @@
 <body class="projects-page">
     <header class="app-header">
         <div class="logo">
-            <a href="/lab">🎮 Club Kinawa Coding Lab</a>
+            <a href="/lab/projects">🧠 Club Kinawa Coding Lab</a>
         </div>
-        <div class="user-menu">
-            <span id="username-display"></span>
-            <a href="/admin" id="admin-link" class="hidden" style="margin-right:10px">Admin</a>
-            <button id="logout-btn" class="btn-small">Log Out</button>
+        <div class="header-links">
+            <span>Hi, <strong id="username-display">coder</strong></span>
+            <a id="admin-link" class="header-link hidden" href="/lab/admin">Admin</a>
+            <button id="logout-btn" class="btn-secondary" type="button">Log Out</button>
         </div>
     </header>
 
     <main class="projects-container">
-        <div class="projects-header">
+        <section class="projects-header">
             <div class="projects-heading">
-                <h1>My <span>Projects</span></h1>
-                <p class="projects-subtitle">Pick a starter, make one tiny change, and keep leveling up from there.</p>
+                <h1><span>Projects</span> with better oversight</h1>
+                <p class="projects-subtitle">
+                    Scan recent activity, spot projects that need attention, and jump straight into recovery tools without losing the current work.
+                    <span class="hidden">Recovery &amp; cleanup tools</span>
+                </p>
             </div>
-            <button id="new-project-btn" class="btn-gradient">
-                <span>+</span> New Project
-            </button>
-        </div>
+            <div class="projects-actions">
+                <button id="new-project-btn" class="btn-gradient" type="button">+ New project</button>
+            </div>
+        </section>
 
-        <div id="projects-list" class="projects-grid">
-            <div class="loading-state">
-                <div class="spinner"></div>
-                <p>Loading your projects...</p>
+        <div id="projects-banner" class="projects-banner"></div>
+
+        <section id="oversight-summary" class="oversight-summary-grid"></section>
+
+        <section class="projects-controls">
+            <div class="projects-controls-top">
+                <label class="projects-search">
+                    <span>Search projects</span>
+                    <input id="project-search" type="search" placeholder="Find by name, owner, file, or recent activity…" autocomplete="off">
+                </label>
+                <label id="scope-filter-wrap" class="filter-field hidden">
+                    <span>Scope</span>
+                    <select id="scope-filter">
+                        <option value="all">All student projects</option>
+                        <option value="mine">Just my projects</option>
+                    </select>
+                </label>
+                <label id="owner-filter-wrap" class="filter-field hidden">
+                    <span>Owner</span>
+                    <select id="owner-filter"></select>
+                </label>
+                <label class="filter-field">
+                    <span>Language</span>
+                    <select id="language-filter">
+                        <option value="all">All languages</option>
+                        <option value="p5js">p5.js</option>
+                        <option value="html">HTML/CSS/JS</option>
+                        <option value="python">Python</option>
+                        <option value="undecided">Starter project</option>
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Status</span>
+                    <select id="status-filter">
+                        <option value="active">Active only</option>
+                        <option value="attention">Needs attention</option>
+                        <option value="archived">Archived only</option>
+                        <option value="all">Everything</option>
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Sort</span>
+                    <select id="sort-filter">
+                        <option value="recent-activity">Recent activity</option>
+                        <option value="recent-opened">Recently opened</option>
+                        <option value="needs-attention">Needs attention first</option>
+                        <option value="most-files">Most files</option>
+                        <option value="most-versions">Most save points</option>
+                        <option value="name">Project name</option>
+                    </select>
+                </label>
             </div>
-        </div>
+            <div class="projects-controls-bottom">
+                <div class="quick-filter-row">
+                    <button class="quick-filter-chip active" data-quick-filter="all" type="button">All active</button>
+                    <button class="quick-filter-chip" data-quick-filter="recent-opened" type="button">Recently opened</button>
+                    <button class="quick-filter-chip" data-quick-filter="recent-activity" type="button">Recent activity</button>
+                    <button class="quick-filter-chip" data-quick-filter="needs-attention" type="button">Needs attention</button>
+                    <button class="quick-filter-chip" data-quick-filter="no-save" type="button">No save point</button>
+                    <button class="quick-filter-chip" data-quick-filter="archived" type="button">Archived</button>
+                </div>
+                <div id="projects-results-meta" class="projects-results-meta">Loading projects…</div>
+            </div>
+        </section>
+
+        <section id="projects-list" class="projects-grid" aria-live="polite"></section>
     </main>
 
     <div id="new-project-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Create New Project</h2>
-                <p>Choose a starter, then change one thing right away so the project feels like yours.</p>
+                <h2>Start a new project</h2>
+                <p>Choose a starter, then change one thing right away. That tiny win makes the next step easier.</p>
             </div>
-
             <div class="modal-body">
-                <div class="starter-ideas" id="starter-ideas">
-                    <button type="button" class="starter-idea" data-template="p5js">🎮 Make a game</button>
-                    <button type="button" class="starter-idea" data-template="html">🌐 Build a web page</button>
-                    <button type="button" class="starter-idea" data-template="python">🐍 Start a Python story</button>
+                <div class="starter-ideas">
+                    <button class="starter-idea" type="button" data-template="p5js">🎮 Game starter</button>
+                    <button class="starter-idea" type="button" data-template="html">🌐 Web page starter</button>
+                    <button class="starter-idea" type="button" data-template="python">🐍 Python starter</button>
                 </div>
 
-                <div id="starter-preview" class="starter-preview"></div>
+                <div class="form-group">
+                    <label for="project-name">Project name</label>
+                    <input id="project-name" type="text" placeholder="My awesome project">
+                </div>
 
                 <div class="form-group">
-                    <label>Choose a Language</label>
+                    <label for="project-desc">What do you want to make?</label>
+                    <textarea id="project-desc" placeholder="A game where... or a website that..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Pick a starter, make one tiny change</label>
                     <div class="language-selector">
-                        <div class="lang-option p5js active" data-lang="p5js">
+                        <button class="lang-option p5js active" type="button" data-lang="p5js">
                             <span class="lang-icon">🎨</span>
                             <span class="lang-name">p5.js</span>
-                        </div>
-                        <div class="lang-option html" data-lang="html">
+                        </button>
+                        <button class="lang-option html" type="button" data-lang="html">
                             <span class="lang-icon">🌐</span>
                             <span class="lang-name">HTML</span>
-                        </div>
-                        <div class="lang-option python" data-lang="python">
+                        </button>
+                        <button class="lang-option python" type="button" data-lang="python">
                             <span class="lang-icon">🐍</span>
                             <span class="lang-name">Python</span>
-                        </div>
+                        </button>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="project-name">Project Name</label>
-                    <input type="text" id="project-name" placeholder="My Awesome Game" maxlength="100">
-                </div>
-
-                <div class="form-group">
-                    <label for="project-desc">What do you want to build?</label>
-                    <textarea id="project-desc" placeholder="Describe your idea... a game, a website, a tool? We'll figure out the best way to build it together." maxlength="1000" rows="3"></textarea>
-                </div>
-
+                <div id="starter-preview" class="starter-preview"></div>
                 <div id="project-error" class="modal-error"></div>
             </div>
-
             <div class="modal-actions">
-                <button id="cancel-project" class="btn-cancel">Cancel</button>
-                <button id="create-project" class="btn-create">Start Building</button>
+                <button id="cancel-project" class="btn-secondary" type="button">Cancel</button>
+                <button id="create-project" class="btn-gradient" type="button">Start Building</button>
             </div>
         </div>
     </div>
 
-    <script src="/lab/static/js/auth.js?v=2"></script>
-    <script src="/lab/static/js/projects.js?v=9"></script>
+    <div id="project-action-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="project-action-title">Project action</h3>
+                <p id="project-action-message" class="action-modal-message"></p>
+            </div>
+            <div class="modal-body">
+                <div id="project-action-input-wrap" class="form-group hidden">
+                    <label id="project-action-input-label" for="project-action-input">Name</label>
+                    <input id="project-action-input" type="text" autocomplete="off" spellcheck="false">
+                </div>
+                <div id="project-action-error" class="modal-error"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="project-action-cancel" class="btn-secondary" type="button">Cancel</button>
+                <button id="project-action-confirm" class="btn-gradient" type="button">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/lab/static/js/auth.js?v=7"></script>
+    <script src="/lab/static/js/projects.js?v=10"></script>
 </body>
 </html>

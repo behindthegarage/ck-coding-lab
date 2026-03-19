@@ -111,6 +111,16 @@ curl https://clubkinawa.net/lab/health
 - Kimi API key (in `ai_client.py` or env var)
 - No local `.env` file (all config in code for simplicity)
 
+## Current API / Schema Notes
+
+- `projects.archived_at` is used for safe archive/unarchive flows.
+- Admin users can open and manage student projects through the same `/api/projects/:id`, file, version, and preview endpoints used by the workspace.
+- Teacher/admin recovery actions live at:
+  - `POST /api/projects/:id/duplicate`
+  - `POST /api/projects/:id/archive`
+  - `POST /api/projects/:id/reset`
+- Projects list oversight metadata is served from `GET /api/projects` (owner, file/version/chat counts, latest activity/review, attention flags).
+
 ## Verification Checklist
 
 Before pushing:

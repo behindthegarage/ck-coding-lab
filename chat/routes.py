@@ -15,6 +15,7 @@ from auth import require_auth
 from ai import get_ai_client
 from chat import chat_bp
 from chat.rate_limit import check_chat_rate_limit
+from projects.access import can_access_project_owner
 from projects.state import is_code_file, persist_generated_code, sync_current_code_cache
 
 WRITE_TOOL_NAMES = {'write_file', 'append_file'}
@@ -267,13 +268,13 @@ def chat_with_ai(project_id):
         return jsonify({'success': False, 'error': 'Message too long (max 2000 chars)'}), 400
 
     with get_db() as db:
-        # Verify ownership and derive current code from authoritative project files
+        # Verify access and derive current code from authoritative project files
         db.execute('''
-            SELECT id, current_code, language FROM projects WHERE id = ? AND user_id = ?
-        ''', (project_id, user_id))
+            SELECT id, user_id, current_code, language FROM projects WHERE id = ?
+        ''', (project_id,))
 
         result = db.fetchone()
-        if not result:
+        if not result or not can_access_project_owner(g.current_user, result['user_id']):
             return jsonify({'success': False, 'error': 'Project not found'}), 404
 
         language = result['language'] or 'undecided'

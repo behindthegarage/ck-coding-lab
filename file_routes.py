@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, g
 
 from database import get_db, row_to_dict
 from auth import validate_session
+from projects.access import can_access_project_owner
 from projects.state import build_project_state, is_code_file, sync_current_code_cache
 from projects.utils import create_default_files as create_project_default_files
 
@@ -42,11 +43,12 @@ def require_auth(f):
     return decorated
 
 
-def verify_project_access(project_id, user_id):
-    """Verify user owns the project. Returns True if access granted."""
+def verify_project_access(project_id, current_user):
+    """Verify that the current user can access the project."""
     with get_db() as db:
-        db.execute('SELECT id FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
-        return db.fetchone() is not None
+        db.execute('SELECT id, user_id FROM projects WHERE id = ?', (project_id,))
+        row = db.fetchone()
+        return bool(row and can_access_project_owner(current_user, row['user_id']))
 
 
 def validate_filename(filename):
@@ -72,9 +74,7 @@ def validate_filename(filename):
 @require_auth
 def list_project_files(project_id):
     """Get all files for a project."""
-    user_id = g.current_user['id']
-    
-    if not verify_project_access(project_id, user_id):
+    if not verify_project_access(project_id, g.current_user):
         return jsonify({"success": False, "error": "Project not found"}), 404
     
     with get_db() as db:
@@ -102,7 +102,6 @@ def list_project_files(project_id):
 @require_auth
 def create_project_file(project_id):
     """Create a new file in the project."""
-    user_id = g.current_user['id']
     data = request.get_json()
     
     if not data or 'filename' not in data:
@@ -114,7 +113,7 @@ def create_project_file(project_id):
     if not is_valid:
         return jsonify({"success": False, "error": filename}), 400
     
-    if not verify_project_access(project_id, user_id):
+    if not verify_project_access(project_id, g.current_user):
         return jsonify({"success": False, "error": "Project not found"}), 404
     
     with get_db() as db:
@@ -152,8 +151,6 @@ def create_project_file(project_id):
 @require_auth
 def get_file(file_id):
     """Get a single file's content."""
-    user_id = g.current_user['id']
-    
     with get_db() as db:
         # Join with projects to verify ownership
         db.execute('''
@@ -167,7 +164,7 @@ def get_file(file_id):
         if not row:
             return jsonify({"success": False, "error": "File not found"}), 404
         
-        if row['project_owner_id'] != user_id:
+        if not can_access_project_owner(g.current_user, row['project_owner_id']):
             return jsonify({"success": False, "error": "Access denied"}), 403
         
         file_data = row_to_dict(row)
@@ -181,7 +178,6 @@ def get_file(file_id):
 @require_auth
 def update_file(file_id):
     """Update a file's content."""
-    user_id = g.current_user['id']
     data = request.get_json()
     
     if not data or 'content' not in data:
@@ -203,7 +199,7 @@ def update_file(file_id):
         if not row:
             return jsonify({"success": False, "error": "File not found"}), 404
         
-        if row['project_owner_id'] != user_id:
+        if not can_access_project_owner(g.current_user, row['project_owner_id']):
             return jsonify({"success": False, "error": "Access denied"}), 403
         
         # Update file
@@ -232,7 +228,6 @@ def update_file(file_id):
 @require_auth
 def rename_file(file_id):
     """Rename a file."""
-    user_id = g.current_user['id']
     data = request.get_json()
 
     if not data or 'filename' not in data:
@@ -255,7 +250,7 @@ def rename_file(file_id):
         if not row:
             return jsonify({"success": False, "error": "File not found"}), 404
 
-        if row['project_owner_id'] != user_id:
+        if not can_access_project_owner(g.current_user, row['project_owner_id']):
             return jsonify({"success": False, "error": "Access denied"}), 403
 
         if row['filename'] == new_filename:
@@ -293,7 +288,6 @@ def rename_file(file_id):
 @require_auth
 def delete_file(file_id):
     """Delete a file."""
-    user_id = g.current_user['id']
     
     with get_db() as db:
         # Verify ownership through project
@@ -309,7 +303,7 @@ def delete_file(file_id):
         if not row:
             return jsonify({"success": False, "error": "File not found"}), 404
         
-        if row['project_owner_id'] != user_id:
+        if not can_access_project_owner(g.current_user, row['project_owner_id']):
             return jsonify({"success": False, "error": "Access denied"}), 403
         
         # Delete file
@@ -338,13 +332,12 @@ def delete_file(file_id):
 @require_auth
 def get_file_by_name(project_id, filename):
     """Get a file by project_id and filename."""
-    user_id = g.current_user['id']
 
     is_valid, filename = validate_filename(filename)
     if not is_valid:
         return jsonify({"success": False, "error": filename}), 400
     
-    if not verify_project_access(project_id, user_id):
+    if not verify_project_access(project_id, g.current_user):
         return jsonify({"success": False, "error": "Project not found"}), 404
     
     with get_db() as db:
@@ -366,7 +359,6 @@ def get_file_by_name(project_id, filename):
 @require_auth
 def update_file_by_name(project_id, filename):
     """Update or create a file by name (upsert)."""
-    user_id = g.current_user['id']
     data = request.get_json()
     
     if not data or 'content' not in data:
@@ -378,7 +370,7 @@ def update_file_by_name(project_id, filename):
     if not is_valid:
         return jsonify({"success": False, "error": filename}), 400
     
-    if not verify_project_access(project_id, user_id):
+    if not verify_project_access(project_id, g.current_user):
         return jsonify({"success": False, "error": "Project not found"}), 404
     
     with get_db() as db:
@@ -430,9 +422,8 @@ def update_file_by_name(project_id, filename):
 @require_auth
 def get_all_files_content(project_id):
     """Get content of all files for context loading."""
-    user_id = g.current_user['id']
     
-    if not verify_project_access(project_id, user_id):
+    if not verify_project_access(project_id, g.current_user):
         return jsonify({"success": False, "error": "Project not found"}), 404
     
     with get_db() as db:
@@ -454,9 +445,8 @@ def get_all_files_content(project_id):
 @require_auth
 def seed_default_files(project_id):
     """Create any missing default planning docs plus a starter file for a project."""
-    user_id = g.current_user['id']
 
-    if not verify_project_access(project_id, user_id):
+    if not verify_project_access(project_id, g.current_user):
         return jsonify({"success": False, "error": "Project not found"}), 404
 
     with get_db() as db:
@@ -505,16 +495,15 @@ def seed_default_files(project_id):
 @require_auth
 def get_preview_bundle(project_id):
     """Get all files bundled for preview (for multi-file projects)."""
-    user_id = g.current_user['id']
 
     with get_db() as db:
         db.execute('''
-            SELECT language, current_code
+            SELECT user_id, language, current_code
             FROM projects
-            WHERE id = ? AND user_id = ?
-        ''', (project_id, user_id))
+            WHERE id = ?
+        ''', (project_id,))
         project = db.fetchone()
-        if not project:
+        if not project or not can_access_project_owner(g.current_user, project['user_id']):
             return jsonify({"success": False, "error": "Project not found"}), 404
 
         project_state = build_project_state(

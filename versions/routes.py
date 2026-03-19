@@ -13,6 +13,7 @@ from flask import request, jsonify, g
 from database import get_db, row_to_dict
 from auth import require_auth
 from versions import versions_bp
+from projects.access import can_access_project_owner
 from projects.state import (
     build_project_state,
     default_code_filename,
@@ -52,19 +53,18 @@ def _build_version_summary(version, language, live_snapshot_files, live_entry_fi
 @require_auth
 def save_version(project_id):
     """Save a named version of the current code."""
-    user_id = g.current_user['id']
     data = request.get_json()
 
     description = data.get('description', '').strip() if data else ''
 
     with get_db() as db:
-        # Verify ownership and build a coherent snapshot from project files first
+        # Verify access and build a coherent snapshot from project files first
         db.execute('''
-            SELECT current_code, language FROM projects WHERE id = ? AND user_id = ?
-        ''', (project_id, user_id))
+            SELECT user_id, current_code, language FROM projects WHERE id = ?
+        ''', (project_id,))
 
         result = db.fetchone()
-        if not result:
+        if not result or not can_access_project_owner(g.current_user, result['user_id']):
             return jsonify({"success": False, "error": "Project not found"}), 404
 
         project_state = build_project_state(
@@ -104,17 +104,16 @@ def save_version(project_id):
 @require_auth
 def list_versions(project_id):
     """List all saved versions for a project."""
-    user_id = g.current_user['id']
 
     with get_db() as db:
-        # Verify ownership and fetch live state for version comparisons
+        # Verify access and fetch live state for version comparisons
         db.execute('''
-            SELECT current_code, language
+            SELECT user_id, current_code, language
             FROM projects
-            WHERE id = ? AND user_id = ?
-        ''', (project_id, user_id))
+            WHERE id = ?
+        ''', (project_id,))
         project = db.fetchone()
-        if not project:
+        if not project or not can_access_project_owner(g.current_user, project['user_id']):
             return jsonify({"success": False, "error": "Project not found"}), 404
 
         language = project['language'] or 'undecided'
@@ -147,12 +146,11 @@ def list_versions(project_id):
 @require_auth
 def restore_version(project_id, version_id):
     """Restore a saved version into the live project state."""
-    user_id = g.current_user['id']
 
     with get_db() as db:
-        db.execute('SELECT language FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        db.execute('SELECT user_id, language FROM projects WHERE id = ?', (project_id,))
         project = db.fetchone()
-        if not project:
+        if not project or not can_access_project_owner(g.current_user, project['user_id']):
             return jsonify({"success": False, "error": "Project not found"}), 404
 
         db.execute('''
@@ -187,13 +185,12 @@ def restore_version(project_id, version_id):
 @require_auth
 def get_version(project_id, version_id):
     """Get a specific version's code."""
-    user_id = g.current_user['id']
 
     with get_db() as db:
-        # Verify ownership and fetch project language for legacy snapshot fallback
-        db.execute('SELECT language FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        # Verify access and fetch project language for legacy snapshot fallback
+        db.execute('SELECT user_id, language FROM projects WHERE id = ?', (project_id,))
         project = db.fetchone()
-        if not project:
+        if not project or not can_access_project_owner(g.current_user, project['user_id']):
             return jsonify({"success": False, "error": "Project not found"}), 404
 
         db.execute('''

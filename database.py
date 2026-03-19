@@ -388,6 +388,30 @@ def migrate_v6_code_version_snapshots(db_path: str = None) -> None:
 
 
 
+def migrate_v7_project_archiving(db_path: str = None) -> None:
+    """
+    Migration: Add an archived_at column to projects for safe cleanup flows.
+    """
+    if db_path is None:
+        db_path = get_database_path()
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("PRAGMA table_info(projects)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    if 'archived_at' not in columns:
+        cursor.execute('''
+            ALTER TABLE projects
+            ADD COLUMN archived_at TIMESTAMP
+        ''')
+
+    conn.commit()
+    conn.close()
+
+
+
 def init_db_full(db_path: str = None) -> None:
     """
     Initialize complete database including all migrations.
@@ -401,3 +425,4 @@ def init_db_full(db_path: str = None) -> None:
     migrate_v4_admin_columns(db_path)
     migrate_v5_project_files(db_path)
     migrate_v6_code_version_snapshots(db_path)
+    migrate_v7_project_archiving(db_path)
