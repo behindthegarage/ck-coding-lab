@@ -12,7 +12,7 @@ from flask import Blueprint, request, jsonify, g
 
 from database import get_db, row_to_dict
 from auth import validate_session
-from projects.state import is_code_file, sync_current_code_cache
+from projects.state import build_project_state, is_code_file, sync_current_code_cache
 from projects.utils import create_default_files as create_project_default_files
 
 
@@ -506,20 +506,27 @@ def seed_default_files(project_id):
 def get_preview_bundle(project_id):
     """Get all files bundled for preview (for multi-file projects)."""
     user_id = g.current_user['id']
-    
-    if not verify_project_access(project_id, user_id):
-        return jsonify({"success": False, "error": "Project not found"}), 404
-    
+
     with get_db() as db:
         db.execute('''
-            SELECT filename, content
-            FROM project_files
-            WHERE project_id = ?
-            ORDER BY filename
-        ''', (project_id,))
-        
-        files = {}
-        for row in db.fetchall():
-            files[row['filename']] = row['content']
-    
-    return jsonify({"success": True, "files": files})
+            SELECT language, current_code
+            FROM projects
+            WHERE id = ? AND user_id = ?
+        ''', (project_id, user_id))
+        project = db.fetchone()
+        if not project:
+            return jsonify({"success": False, "error": "Project not found"}), 404
+
+        project_state = build_project_state(
+            db,
+            project_id,
+            project['language'] or 'undecided',
+            fallback_current_code=project['current_code'] or '',
+            synthesize_primary_file=True,
+        )
+
+    return jsonify({
+        "success": True,
+        "files": project_state['snapshot_files'],
+        "entry_filename": project_state['primary_file'],
+    })

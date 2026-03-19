@@ -299,13 +299,14 @@ async function runPreview() {
         onEvent: handlePreviewSandboxEvent
     });
 
-    const hasIndexHtml = projectFiles.some(f => f.filename === 'index.html');
+    const hasHtmlEntry = projectFiles.some(f => (f.filename || '').toLowerCase().endsWith('.html'));
 
-    if (hasIndexHtml) {
+    if (hasHtmlEntry) {
         try {
             const response = await apiRequest(`/projects/${projectId}/preview-bundle`);
             if (response && response.success && response.files) {
-                const bundledHtml = buildPreviewBundle(response.files);
+                const entryFilename = response.entry_filename || 'index.html';
+                const bundledHtml = buildPreviewBundle(response.files, entryFilename);
                 sandboxRunner.runHTML(bundledHtml);
                 return;
             }
@@ -334,8 +335,8 @@ async function runPreview() {
     sandboxRunner.run(currentCode, language);
 }
 
-function buildPreviewBundle(files) {
-    let indexHtml = files['index.html'] || '';
+function buildPreviewBundle(files, entryFilename = 'index.html') {
+    let indexHtml = files[entryFilename] || files['index.html'] || '';
 
     const cssFiles = Object.keys(files).filter(f => f.endsWith('.css'));
     let cssInjection = '';

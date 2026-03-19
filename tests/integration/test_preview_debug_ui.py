@@ -18,6 +18,7 @@ class TestPreviewDebugSurface:
         assert 'id="preview-debug-toggle"' in html
         assert 'id="preview-debug-list"' in html
         assert 'Watching runtime errors and console.error.' in html
+        assert '/lab/static/js/workspace-preview.js?v=3' in html
 
     def test_sandbox_injects_runtime_and_console_debug_bridge(self, client):
         response = client.get('/lab/static/js/sandbox.js')
@@ -39,3 +40,7 @@ class TestPreviewDebugSurface:
         assert 'function appendPreviewDebugEntry(entry)' in js
         assert 'preview-debug-entry' in js
         assert 'Could not load preview files' in js
+        assert "const hasHtmlEntry = projectFiles.some(f => (f.filename || '').toLowerCase().endsWith('.html'));" in js
+        assert "const entryFilename = response.entry_filename || 'index.html';" in js
+        assert 'const bundledHtml = buildPreviewBundle(response.files, entryFilename);' in js
+        assert "function buildPreviewBundle(files, entryFilename = 'index.html')" in js

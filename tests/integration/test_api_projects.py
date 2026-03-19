@@ -697,6 +697,36 @@ class TestProjectFilesAPI:
         assert get_response.status_code == 200
         assert get_response.get_json()['file']['content'] == 'export const speed = 3;'
 
+    def test_preview_bundle_returns_resolved_entry_filename_for_nested_html_projects(self, client, auth_headers, project_factory):
+        """Preview bundle should identify the actual HTML entry file, even when it is nested."""
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        entry_response = client.put(
+            f'/api/projects/{project_id}/files/pages/index.html',
+            headers=auth_headers,
+            json={'content': '<html><body><script src="../main.js"></script></body></html>'}
+        )
+        assert entry_response.status_code == 200
+
+        script_response = client.put(
+            f'/api/projects/{project_id}/files/main.js',
+            headers=auth_headers,
+            json={'content': 'console.log("nested entry");'}
+        )
+        assert script_response.status_code == 200
+
+        bundle_response = client.get(
+            f'/api/projects/{project_id}/preview-bundle',
+            headers=auth_headers,
+        )
+        assert bundle_response.status_code == 200
+        data = bundle_response.get_json()
+        assert data['success'] is True
+        assert data['entry_filename'] == 'pages/index.html'
+        assert data['files']['pages/index.html'] == '<html><body><script src="../main.js"></script></body></html>'
+        assert data['files']['main.js'] == 'console.log("nested entry");'
+
     def test_deleting_primary_code_file_clears_current_code(self, client, auth_headers, project_factory, db_path):
         """Deleting the only primary code file should clear projects.current_code."""
         import sqlite3
