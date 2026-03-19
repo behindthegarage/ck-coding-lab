@@ -18,7 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=50' in html
+        assert '/lab/static/js/workspace.js?v=51' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
@@ -149,6 +149,21 @@ class TestWorkspaceRecoverySurface:
         assert 'projectFiles = data.files || [];' in js
         assert 'currentCode = project.current_code || \"\";' not in js
         assert 'reconcileWorkspaceTreeState();' in js
+
+    def test_workspace_script_reconciles_open_file_modal_content_when_project_state_changes_under_it(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'function syncOpenFileModalWithProjectState()' in js
+        assert 'const nextContent = currentFile.content || \"\";' not in js
+        assert "const nextContent = currentFile.content || '';" in js
+        assert 'const hasUnsavedLocalEdits = isFileModalDirty();' in js
+        assert 'filenameEl.textContent = currentFile.filename;' in js
+        assert 'This file changed elsewhere. Review before saving so you do not overwrite newer code.' in js
+        assert 'File updated from the latest project state.' in js
+        assert 'syncOpenFileModalWithProjectState();' in js
 
     def test_versions_script_handles_network_errors_during_save(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')

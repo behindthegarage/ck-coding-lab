@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 50 - Three-pane workspace layout with AI edit review cards
+// Version 51 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -486,6 +486,51 @@ function clearMissingCurrentFileSelection() {
     }
 }
 
+function syncOpenFileModalWithProjectState() {
+    if (currentFileId === null) {
+        return;
+    }
+
+    const modal = document.getElementById('file-modal');
+    if (!modal || modal.classList.contains('hidden')) {
+        return;
+    }
+
+    const currentFile = getProjectFileById(currentFileId);
+    if (!currentFile) {
+        return;
+    }
+
+    const filenameEl = document.getElementById('modal-filename');
+    const editor = document.getElementById('modal-file-editor');
+    if (!filenameEl || !editor) {
+        return;
+    }
+
+    const nextContent = currentFile.content || '';
+    const hasUnsavedLocalEdits = isFileModalDirty();
+    filenameEl.textContent = currentFile.filename;
+
+    if (hasUnsavedLocalEdits) {
+        if (currentFileOriginalContent !== nextContent) {
+            setFileModalStatus('This file changed elsewhere. Review before saving so you do not overwrite newer code.', 'info');
+        }
+        return;
+    }
+
+    const changedInProject = currentFileOriginalContent !== nextContent;
+    currentFileOriginalContent = nextContent;
+    editor.value = nextContent;
+
+    if (changedInProject) {
+        setFileModalStatus('File updated from the latest project state.', 'info');
+    } else if (!fileModalSaving) {
+        setFileModalStatus('', 'info');
+    }
+
+    updateFileModalSaveState();
+}
+
 function reconcileWorkspaceTreeState() {
     const validPaths = getExistingFolderPaths(projectFiles);
     openFolderPaths = pruneFolderStateSnapshot(openFolderPaths, validPaths);
@@ -495,6 +540,7 @@ function reconcileWorkspaceTreeState() {
     }
 
     clearMissingCurrentFileSelection();
+    syncOpenFileModalWithProjectState();
 
     if (activeFileMenuId !== null && !getProjectFileById(activeFileMenuId)) {
         activeFileMenuId = null;
