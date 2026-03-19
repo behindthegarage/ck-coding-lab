@@ -130,6 +130,16 @@ class TestCreateProjectAPI:
         assert response.status_code == 201
         assert response.get_json()['project']['language'] == 'python'
 
+    def test_create_project_rejects_description_longer_than_1000_characters(self, client, auth_headers):
+        """Create should enforce the same description limit the onboarding UI expects."""
+        response = client.post('/api/projects', headers=auth_headers,
+                              json={'name': 'Too wordy', 'description': 'A' * 1001})
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'description' in data['error'].lower()
+
     @pytest.mark.parametrize(
         ('language', 'starter_filename', 'starter_snippet'),
         [
@@ -277,6 +287,22 @@ class TestUpdateProjectAPI:
         
         assert response.status_code == 400
         assert response.get_json()['success'] is False
+
+    def test_update_project_non_json_request_returns_400_instead_of_500(self, client, auth_headers, project_factory):
+        """Malformed update payloads should fail cleanly instead of crashing the onboarding flow."""
+        project = project_factory()
+
+        response = client.put(
+            f'/api/projects/{project["id"]}',
+            headers=auth_headers,
+            data='name=Broken payload',
+            content_type='application/x-www-form-urlencoded'
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'no fields to update' in data['error'].lower()
     
     def test_update_project_not_found(self, client, auth_headers):
         """Test updating non-existent project."""
@@ -452,6 +478,39 @@ class TestProjectFilesAPI:
         assert 'architecture.md' in filenames
         assert 'todo.md' in filenames
         assert 'notes.md' in filenames
+
+    def test_bulk_reseed_restores_missing_starter_files_without_duplicating_existing_ones(self, client, auth_headers):
+        """Starter reseeding should heal partially-empty projects instead of crashing or duplicating files."""
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Starter Recovery', 'language': 'html'}
+        )
+        assert create_response.status_code == 201
+        project_id = create_response.get_json()['project']['id']
+
+        project_response = client.get(f'/api/projects/{project_id}', headers=auth_headers)
+        files = project_response.get_json()['files']
+        files_by_name = {file['filename']: file['id'] for file in files}
+
+        delete_index = client.delete(f"/api/files/{files_by_name['index.html']}", headers=auth_headers)
+        delete_notes = client.delete(f"/api/files/{files_by_name['notes.md']}", headers=auth_headers)
+        assert delete_index.status_code == 200
+        assert delete_notes.status_code == 200
+
+        reseed_response = client.post(f'/api/projects/{project_id}/files/bulk', headers=auth_headers)
+
+        assert reseed_response.status_code == 200
+        reseed_data = reseed_response.get_json()
+        assert reseed_data['success'] is True
+        assert reseed_data['created_count'] == 2
+        assert sorted(reseed_data['created']) == ['index.html', 'notes.md']
+
+        healed_project = client.get(f'/api/projects/{project_id}', headers=auth_headers).get_json()
+        healed_filenames = [file['filename'] for file in healed_project['files']]
+        assert 'index.html' in healed_filenames
+        assert 'notes.md' in healed_filenames
+        assert '<!DOCTYPE html>' in healed_project['project']['current_code']
 
     def test_creating_first_primary_code_file_syncs_project_current_code(self, client, auth_headers, project_factory, db_path):
         """Creating the first primary code file should seed projects.current_code."""

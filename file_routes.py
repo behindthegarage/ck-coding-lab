@@ -13,6 +13,7 @@ from flask import Blueprint, request, jsonify, g
 from database import get_db, row_to_dict
 from auth import validate_session
 from projects.state import is_code_file, sync_current_code_cache
+from projects.utils import create_default_files as create_project_default_files
 
 
 # Create blueprint
@@ -451,8 +452,8 @@ def get_all_files_content(project_id):
 
 @file_bp.route('/projects/<int:project_id>/files/bulk', methods=['POST'])
 @require_auth
-def create_default_files(project_id):
-    """Create default planning docs plus a starter file for a project."""
+def seed_default_files(project_id):
+    """Create any missing default planning docs plus a starter file for a project."""
     user_id = g.current_user['id']
 
     if not verify_project_access(project_id, user_id):
@@ -472,6 +473,17 @@ def create_default_files(project_id):
             language=language,
             description=description,
         )
+
+        if created_files:
+            db.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+            project_row = db.fetchone()
+            sync_current_code_cache(
+                db,
+                project_id,
+                language,
+                fallback_current_code=(project_row['current_code'] if project_row else '') or '',
+                touch_project=True,
+            )
 
     created_count = len(created_files)
 

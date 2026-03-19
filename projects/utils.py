@@ -3,9 +3,14 @@ projects/utils.py - Shared project utilities
 Club Kinawa Coding Lab
 """
 
+import sqlite3
 from datetime import datetime
 
 from projects.state import sync_current_code_cache
+
+
+SUPPORTED_PROJECT_LANGUAGES = {'p5js', 'html', 'python', 'undecided'}
+MAX_PROJECT_DESCRIPTION_LENGTH = 1000
 
 
 LANGUAGE_LABELS = {
@@ -158,23 +163,30 @@ FIRST_STEPS = {
 }
 
 
+def normalize_project_language(language: str) -> str:
+    """Normalize project language values to the supported starter set."""
+    normalized = (language or 'undecided').strip().lower()
+    return normalized if normalized in SUPPORTED_PROJECT_LANGUAGES else 'undecided'
+
+
 def language_label(language: str) -> str:
     """Return a display-friendly language label."""
-    return LANGUAGE_LABELS.get(language or 'undecided', 'Starter project')
+    return LANGUAGE_LABELS.get(normalize_project_language(language), 'Starter project')
 
 
 def starter_code_file(language: str):
     """Return starter filename/content for the chosen language."""
-    return STARTER_CODE_TEMPLATES.get(language or 'undecided', STARTER_CODE_TEMPLATES['undecided'])
+    return STARTER_CODE_TEMPLATES.get(normalize_project_language(language), STARTER_CODE_TEMPLATES['undecided'])
 
 
 def starter_first_steps(language: str):
     """Return friendly first-step suggestions for the chosen language."""
-    return FIRST_STEPS.get(language or 'undecided', FIRST_STEPS['undecided'])
+    return FIRST_STEPS.get(normalize_project_language(language), FIRST_STEPS['undecided'])
 
 
 def create_default_files(db, project_id: int, project_name: str, language: str = 'undecided', description: str = ''):
     """Create default planning docs plus a runnable starter file for a new project."""
+    language = normalize_project_language(language)
     starter_filename, starter_content = starter_code_file(language)
     steps = starter_first_steps(language)
     project_blurb = description or 'Build the smallest fun version first, then level it up.'
@@ -292,9 +304,10 @@ _None yet_
                 (project_id, filename, content),
             )
             created_files.append(filename)
-        except Exception:
-            # File might already exist, skip
-            pass
+        except sqlite3.IntegrityError as exc:
+            # Allow idempotent reseeding, but don't hide unrelated database issues.
+            if 'UNIQUE constraint failed' not in str(exc):
+                raise
 
     sync_current_code_cache(db, project_id, language, fallback_current_code='', touch_project=False)
     return created_files

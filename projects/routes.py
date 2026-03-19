@@ -11,7 +11,11 @@ from flask import request, jsonify, g
 from database import get_db, row_to_dict
 from auth import require_auth
 from projects import project_bp
-from projects.utils import create_default_files
+from projects.utils import (
+    MAX_PROJECT_DESCRIPTION_LENGTH,
+    create_default_files,
+    normalize_project_language,
+)
 from projects.state import sync_current_code_cache
 from sandbox import CodeValidator
 
@@ -39,19 +43,21 @@ def list_projects():
 @require_auth
 def create_project():
     """Create a new project with default files."""
-    data = request.get_json()
-    
-    if not data or 'name' not in data:
+    data = request.get_json(silent=True) or {}
+
+    if 'name' not in data:
         return jsonify({"success": False, "error": "Project name is required"}), 400
-    
+
     name = data['name'].strip()
     description = data.get('description', '').strip()
-    language = data.get('language', 'undecided')
+    language = normalize_project_language(data.get('language', 'undecided'))
     user_id = g.current_user['id']
     
     if len(name) < 1 or len(name) > 100:
         return jsonify({"success": False, "error": "Project name must be 1-100 characters"}), 400
-    
+    if len(description) > MAX_PROJECT_DESCRIPTION_LENGTH:
+        return jsonify({"success": False, "error": f"Description must be under {MAX_PROJECT_DESCRIPTION_LENGTH} characters"}), 400
+
     with get_db() as db:
         db.execute('''
             INSERT INTO projects (user_id, name, description, current_code, language)
@@ -137,8 +143,8 @@ def get_project(project_id):
 def update_project(project_id):
     """Update project name/description."""
     user_id = g.current_user['id']
-    data = request.get_json()
-    
+    data = request.get_json(silent=True) or {}
+
     with get_db() as db:
         # Verify ownership
         db.execute('SELECT id FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
@@ -158,8 +164,8 @@ def update_project(project_id):
         
         if 'description' in data:
             description = data['description'].strip()
-            if len(description) > 500:
-                return jsonify({"success": False, "error": "Description must be under 500 characters"}), 400
+            if len(description) > MAX_PROJECT_DESCRIPTION_LENGTH:
+                return jsonify({"success": False, "error": f"Description must be under {MAX_PROJECT_DESCRIPTION_LENGTH} characters"}), 400
             updates.append('description = ?')
             params.append(description)
         

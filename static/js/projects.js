@@ -174,6 +174,12 @@ function openNewProjectModal(presetKey = null) {
     document.getElementById('project-error').classList.remove('show');
     document.getElementById('project-error').textContent = '';
 
+    const createBtn = document.getElementById('create-project');
+    if (createBtn) {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Start Building';
+    }
+
     if (presetKey) {
         applyStarterPreset(presetKey, true);
     } else {
@@ -198,6 +204,32 @@ function closeNewProjectModal(resetText = true) {
     }
 
     setSelectedLanguage('p5js');
+}
+
+function renderProjectsError(container, message = 'Could not load your projects right now.') {
+    container.innerHTML = `
+        <section class="empty-state">
+            <div class="empty-state-hero">
+                <div class="empty-state-icon">⚠️</div>
+                <h3>We couldn't load your projects</h3>
+                <p>${escapeHtml(message)}</p>
+            </div>
+            <div class="empty-state-actions">
+                <button id="retry-projects-load" class="btn-gradient" type="button">Try again</button>
+                <button id="projects-open-new" class="btn-secondary" type="button">Start a new project instead</button>
+            </div>
+        </section>
+    `;
+
+    const retryButton = document.getElementById('retry-projects-load');
+    if (retryButton) {
+        retryButton.addEventListener('click', () => loadProjects());
+    }
+
+    const newProjectButton = document.getElementById('projects-open-new');
+    if (newProjectButton) {
+        newProjectButton.addEventListener('click', () => openNewProjectModal());
+    }
 }
 
 function renderEmptyState(container) {
@@ -251,8 +283,23 @@ async function loadProjects() {
         </div>
     `;
 
-    const data = await apiRequest('/projects');
-    if (!data) return;
+    let data;
+    try {
+        data = await apiRequest('/projects');
+    } catch (error) {
+        renderProjectsError(container, 'Network error. Please check your connection and try again.');
+        return;
+    }
+
+    if (!data) {
+        renderProjectsError(container, 'Your session may have expired. Please sign in again.');
+        return;
+    }
+
+    if (!data.success) {
+        renderProjectsError(container, data.error || 'The projects list could not be loaded.');
+        return;
+    }
 
     projects = data.projects || [];
 
@@ -328,23 +375,31 @@ async function createProject() {
         return;
     }
 
+    errorDiv.classList.remove('show');
+    errorDiv.textContent = '';
     createBtn.disabled = true;
     createBtn.textContent = 'Creating...';
 
-    const data = await apiRequest('/projects', {
-        method: 'POST',
-        body: { name, description, language: selectedLanguage }
-    });
+    try {
+        const data = await apiRequest('/projects', {
+            method: 'POST',
+            body: { name, description, language: selectedLanguage }
+        });
 
-    if (data && data.success) {
-        window.location.href = `/lab/project/${data.project.id}`;
-        return;
+        if (data && data.success) {
+            window.location.href = `/lab/project/${data.project.id}`;
+            return;
+        }
+
+        errorDiv.textContent = data?.error || 'Failed to create project. Please try again.';
+        errorDiv.classList.add('show');
+    } catch (error) {
+        errorDiv.textContent = 'Network error. Please try again.';
+        errorDiv.classList.add('show');
+    } finally {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Start Building';
     }
-
-    errorDiv.textContent = data?.error || 'Failed to create project. Please try again.';
-    errorDiv.classList.add('show');
-    createBtn.disabled = false;
-    createBtn.textContent = 'Start Building';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
