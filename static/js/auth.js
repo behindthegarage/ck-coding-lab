@@ -69,6 +69,31 @@ async function logout() {
 }
 
 // API request helper with auth
+function summarizeServerError(response, raw = '') {
+    const status = response?.status || 0;
+    const normalized = String(raw || '').replace(/\s+/g, ' ').trim();
+    const looksLikeHtml = /<html|<body|<!doctype/i.test(normalized);
+
+    if (status === 504) {
+        return 'The AI took too long to respond. Please try again.';
+    }
+
+    if (status === 502 || status === 503) {
+        return 'The AI service is temporarily unavailable. Please try again.';
+    }
+
+    if (looksLikeHtml) {
+        return status
+            ? `Server error (${status}). Please try again.`
+            : 'Server error. Please try again.';
+    }
+
+    const snippet = normalized.slice(0, 160);
+    return status
+        ? `Server error (${status}). ${snippet || 'No details available.'}`
+        : (snippet || 'Server error. Please try again.');
+}
+
 async function apiRequest(url, options = {}) {
     const token = getToken();
     if (!token) {
@@ -102,12 +127,11 @@ async function apiRequest(url, options = {}) {
     const raw = await response.text();
 
     if (!contentType.includes('application/json')) {
-        const snippet = raw.replace(/\s+/g, ' ').trim().slice(0, 160);
         return {
             success: false,
             error: response.ok
                 ? 'Server returned a non-JSON response.'
-                : `Server error (${response.status}). ${snippet || 'No details available.'}`
+                : summarizeServerError(response, raw)
         };
     }
 
