@@ -272,7 +272,14 @@ class TestChatConversationFlow:
                     'result': {'success': True, 'action': 'updated'}
                 }
             ],
-            'created_files': []
+            'created_files': [
+                {
+                    'filename': 'todo.md',
+                    'action': 'updated',
+                    'before_content': '- [ ] Old task',
+                    'after_content': '- [ ] Task'
+                }
+            ]
         }
         
         project = project_factory()
@@ -284,6 +291,56 @@ class TestChatConversationFlow:
         data = response.get_json()
         assert 'tool_calls' in data['response']
         assert len(data['response']['tool_calls']) == 1
+        assert data['response']['change_review'][0]['filename'] == 'todo.md'
+        assert data['response']['change_review'][0]['summary']
+        assert 'Old task' in data['response']['change_review'][0]['diff_excerpt']
+        assert 'Task' in data['response']['change_review'][0]['diff_excerpt']
+
+    def test_chat_persists_review_section_in_assistant_transcript(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        """Assistant transcripts should include a lightweight review section for changed files."""
+        project = project_factory(language='html')
+
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': '',
+            'explanation': 'I refreshed index.html.',
+            'suggestions': [],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 33,
+            'tool_calls': [],
+            'created_files': [
+                {
+                    'filename': 'index.html',
+                    'action': 'updated',
+                    'before_content': '<body>Old</body>',
+                    'after_content': '<body>New</body>'
+                }
+            ]
+        }
+
+        response = client.post(
+            f'/api/projects/{project["id"]}/chat',
+            headers=auth_headers,
+            json={'message': 'Refresh the page'}
+        )
+
+        assert response.status_code == 200
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM conversations WHERE project_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+            (project['id'],)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row is not None
+        assert '## Review' in row['content']
+        assert '### `index.html`' in row['content']
+        assert '```diff' in row['content']
 
     def test_chat_returns_synced_code_after_tool_written_primary_file(self, client, auth_headers, project_factory, db_path):
         """Tool-based code writes should refresh current_code from project_files."""

@@ -1877,6 +1877,115 @@
     flex-wrap: wrap;
 }
 
+.assistant-review-card {
+    margin-top: 0.85rem;
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.42);
+    overflow: hidden;
+}
+
+.assistant-review-toggle {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+}
+
+.assistant-review-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.assistant-review-summary {
+    display: block;
+    margin-top: 0.28rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.assistant-review-toggle-hint {
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.assistant-review-list {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0 1rem 1rem;
+}
+
+.assistant-review-file {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 12px;
+    background: rgba(2, 6, 23, 0.46);
+    padding: 0.85rem;
+}
+
+.assistant-review-file-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+}
+
+.assistant-review-file-name,
+.assistant-review-file-summary,
+.assistant-review-note {
+    margin: 0;
+}
+
+.assistant-review-file-name {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.86rem;
+    color: var(--text);
+}
+
+.assistant-review-file-summary {
+    margin-top: 0.28rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.assistant-review-file-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.assistant-review-open {
+    padding: 0.35rem 0.65rem;
+}
+
+.assistant-review-diff {
+    margin: 0;
+    padding: 0.85rem;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(71, 85, 105, 0.32);
+    color: #e2e8f0;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.assistant-review-note {
+    margin-top: 0.6rem;
+    color: #cbd5e1;
+    font-size: 0.78rem;
+}
+
 /* ============================================
    TOOL CALL INDICATORS
    ============================================ */

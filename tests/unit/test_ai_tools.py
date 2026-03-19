@@ -197,6 +197,12 @@ class TestWriteFile:
         assert result['filename'] == 'newfile.txt'
         assert result['action'] == 'created'
         assert result['content_length'] == len('New content')
+        assert tools.get_change_log()[-1] == {
+            'filename': 'newfile.txt',
+            'action': 'created',
+            'before_content': '',
+            'after_content': 'New content'
+        }
     
     def test_update_existing_file(self, fresh_db):
         """Test updating an existing file."""
@@ -297,6 +303,12 @@ class TestAppendFile:
         # Verify content
         read_result = tools.read_file('append.txt')
         assert read_result['content'] == 'Original Appended'
+        assert tools.get_change_log()[-1] == {
+            'filename': 'append.txt',
+            'action': 'appended',
+            'before_content': 'Original',
+            'after_content': 'Original Appended'
+        }
     
     def test_append_creates_new_file(self, fresh_db):
         """Test that append creates file if it doesn't exist."""

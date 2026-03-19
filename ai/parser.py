@@ -175,9 +175,12 @@ def parse_response(
             try:
                 tool_result = file_tools.write_file(file_info['filename'], file_info['content'])
                 if tool_result.get('success'):
+                    latest_change = file_tools.get_change_log()[-1] if file_tools.get_change_log() else {}
                     result['created_files'].append({
                         'filename': file_info['filename'],
-                        'action': tool_result.get('action', 'created')
+                        'action': tool_result.get('action', 'created'),
+                        'before_content': latest_change.get('before_content', ''),
+                        'after_content': latest_change.get('after_content', file_info['content'])
                     })
                     print(f"_parse_response: saved file {file_info['filename']}")
             except Exception as e:

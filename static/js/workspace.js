@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 45 - Three-pane workspace layout with folders/nested paths in progress
+// Version 46 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -1451,11 +1451,48 @@ function renderPrimaryFile(primaryFile, changedFiles = []) {
     `;
 }
 
+function renderChangeReview(changeReview = []) {
+    if (!changeReview || changeReview.length === 0) return '';
+
+    return `
+        <details class="assistant-review-card" ${changeReview.length === 1 ? 'open' : ''}>
+            <summary class="assistant-review-toggle">
+                <span>
+                    <span class="assistant-section-label">Review changes</span>
+                    <span class="assistant-review-summary">Diff preview for ${changeReview.length} file${changeReview.length === 1 ? '' : 's'}.</span>
+                </span>
+                <span class="assistant-review-toggle-hint">Expand</span>
+            </summary>
+            <div class="assistant-review-list">
+                ${changeReview.map(review => `
+                    <article class="assistant-review-file">
+                        <div class="assistant-review-file-header">
+                            <div>
+                                <p class="assistant-review-file-name">${escapeHtml(review.filename || 'file')}</p>
+                                <p class="assistant-review-file-summary">${escapeHtml(review.summary || 'Updated file')}</p>
+                            </div>
+                            <div class="assistant-review-file-actions">
+                                <span class="assistant-file-chip-action ${escapeHtml(getFileActionTone(review.action || 'updated'))}">${escapeHtml(normalizeFileActionLabel(review.action || 'updated'))}</span>
+                                <button class="assistant-file-link assistant-review-open" type="button" data-open-file="${escapeHtml(review.filename || '')}" title="Open ${escapeHtml(review.filename || 'file')}">
+                                    <span class="assistant-file-chip-open">Open</span>
+                                </button>
+                            </div>
+                        </div>
+                        <pre class="assistant-review-diff"><code>${escapeHtml(review.diffExcerpt || '')}</code></pre>
+                        ${review.truncated ? '<p class="assistant-review-note">Preview trimmed for readability. Open the file to inspect everything.</p>' : ''}
+                    </article>
+                `).join('')}
+            </div>
+        </details>
+    `;
+}
+
 function renderAssistantBubble(data, model, timestamp) {
     const explanationHtml = data.explanation ? `<div class="explanation">${formatText(data.explanation)}</div>` : '';
     const changedFiles = data.changedFiles || [];
     const changedFilesHtml = renderChangedFiles(changedFiles, data.primaryFile || '');
     const primaryFileHtml = renderPrimaryFile(data.primaryFile, changedFiles);
+    const changeReviewHtml = renderChangeReview(data.changeReview || []);
     const toolCallsHtml = renderToolCalls(data.toolCalls || []);
     const suggestions = data.suggestions || [];
 
@@ -1463,6 +1500,7 @@ function renderAssistantBubble(data, model, timestamp) {
         <div class="message-bubble">
             ${explanationHtml}
             ${changedFilesHtml}
+            ${changeReviewHtml}
             ${primaryFileHtml}
             ${toolCallsHtml}
             ${suggestions.length > 0 ? `
@@ -1562,6 +1600,7 @@ async function sendMessage(message) {
                 suggestions: data.response.suggestions || [],
                 toolCalls: data.response.tool_calls || [],
                 changedFiles,
+                changeReview: data.response.change_review || [],
                 primaryFile: data.response.primary_file || ''
             }, data.response.model || 'kimi', new Date().toISOString());
             container.appendChild(assistantMsg);
@@ -1848,6 +1887,7 @@ function parseAssistantMessage(content) {
         suggestions: [],
         toolCalls: [],
         changedFiles: [],
+        changeReview: [],
         primaryFile: ''
     };
 
@@ -1928,6 +1968,30 @@ function parseAssistantMessage(content) {
                 });
             }
         });
+
+        const reviewSection = sections['review'] || '';
+        const reviewBlocks = reviewSection
+            ? reviewSection.trim().split(/\n(?=###\s+`)/g).filter(Boolean)
+            : [];
+        result.changeReview = reviewBlocks.map((block) => {
+            const headingMatch = block.match(/^###\s+`([^`]+)`\s*\n([\s\S]*)$/);
+            if (!headingMatch) return null;
+
+            const filename = (headingMatch[1] || '').trim();
+            const body = headingMatch[2] || '';
+            const actionMatch = body.match(/^- Action:\s*(.+)$/m);
+            const summaryMatch = body.match(/^- Summary:\s*(.+)$/m);
+            const truncated = /- Note:\s*Preview trimmed/i.test(body);
+            const diffMatch = body.match(/```diff\s*\n([\s\S]*?)\n```/);
+
+            return {
+                filename,
+                action: (actionMatch?.[1] || 'Updated').trim().toLowerCase(),
+                summary: (summaryMatch?.[1] || 'Updated file').trim(),
+                diffExcerpt: (diffMatch?.[1] || '').trim(),
+                truncated
+            };
+        }).filter(review => review && review.filename && review.diffExcerpt);
 
         result.suggestions = parseBullets(sections['next ideas'] || sections['next steps'] || sections['suggestions']);
 

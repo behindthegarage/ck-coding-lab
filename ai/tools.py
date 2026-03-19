@@ -14,6 +14,20 @@ class FileTools:
     
     def __init__(self, project_id: int):
         self.project_id = project_id
+        self.change_log = []
+
+    def _record_change(self, filename: str, action: str, before_content: str, after_content: str) -> None:
+        """Track before/after snapshots for downstream review surfaces."""
+        self.change_log.append({
+            "filename": filename,
+            "action": action,
+            "before_content": before_content,
+            "after_content": after_content,
+        })
+
+    def get_change_log(self) -> List[Dict]:
+        """Return captured before/after snapshots for writes made by this tool instance."""
+        return list(self.change_log)
     
     def read_file(self, filename: str) -> Dict:
         """Read a file from the project."""
@@ -52,11 +66,12 @@ class FileTools:
             with get_db() as db:
                 # Check if file exists
                 db.execute('''
-                    SELECT id FROM project_files
+                    SELECT id, content FROM project_files
                     WHERE project_id = ? AND filename = ?
                 ''', (self.project_id, filename))
                 
                 existing = db.fetchone()
+                before_content = existing['content'] if existing else ''
                 
                 if existing:
                     # Update
@@ -73,6 +88,8 @@ class FileTools:
                         VALUES (?, ?, ?)
                     ''', (self.project_id, filename, content))
                     action = "created"
+
+                self._record_change(filename, action, before_content, content)
                 
                 return {
                     "success": True,
@@ -98,6 +115,7 @@ class FileTools:
                 ''', (self.project_id, filename))
                 
                 existing = db.fetchone()
+                before_content = existing['content'] if existing else ''
                 
                 if existing:
                     # Append
@@ -110,11 +128,14 @@ class FileTools:
                     action = "appended"
                 else:
                     # Create new
+                    new_content = content
                     db.execute('''
                         INSERT INTO project_files (project_id, filename, content)
                         VALUES (?, ?, ?)
                     ''', (self.project_id, filename, content))
                     action = "created"
+
+                self._record_change(filename, action, before_content, new_content)
                 
                 return {
                     "success": True,

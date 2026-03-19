@@ -253,7 +253,10 @@ Here you go — writing the file now.
 
         result = parse_response(content, 'html', project_id)
 
-        assert any(f['filename'] == 'index.html' for f in result['created_files'])
+        created_file = next(f for f in result['created_files'] if f['filename'] == 'index.html')
+        assert created_file['action'] == 'created'
+        assert created_file['before_content'] == ''
+        assert '<!DOCTYPE html>' in created_file['after_content']
 
         db_connection.execute(
             'SELECT content FROM project_files WHERE project_id = ? AND filename = ?',

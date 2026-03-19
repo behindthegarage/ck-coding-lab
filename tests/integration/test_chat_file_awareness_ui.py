@@ -17,9 +17,11 @@ class TestChatFileAwarenessSurface:
         assert 'setLatestAssistantChanges(changedFiles);' in js
         assert "const fileButton = event.target.closest('[data-open-file]');" in js
         assert 'assistant-file-chip' in js
+        assert 'assistant-review-card' in js
+        assert 'changeReview: data.response.change_review || []' in js
         assert 'file-recent-badge' in js
 
-    def test_workspace_styles_include_changed_file_chips_and_recent_file_badges(self, client):
+    def test_workspace_styles_include_changed_file_chips_review_cards_and_recent_file_badges(self, client):
         response = client.get('/lab/static/css/workspace.css')
 
         assert response.status_code == 200
@@ -28,6 +30,8 @@ class TestChatFileAwarenessSurface:
         assert '.assistant-file-chip' in css
         assert '.assistant-file-link' in css
         assert '.assistant-file-chip-meta' in css
+        assert '.assistant-review-card' in css
+        assert '.assistant-review-diff' in css
         assert '.file-recent-badge' in css
 
     def test_workspace_template_references_current_workspace_assets(self, client):
@@ -36,5 +40,5 @@ class TestChatFileAwarenessSurface:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert '/lab/static/css/workspace.css?v=40' in html
-        assert '/lab/static/js/workspace.js?v=45' in html
+        assert '/lab/static/css/workspace.css?v=41' in html
+        assert '/lab/static/js/workspace.js?v=46' in html

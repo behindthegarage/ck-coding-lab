@@ -6,6 +6,8 @@ Provides endpoints for:
 - Chat/AI code generation with tool use
 """
 
+import difflib
+
 from flask import request, jsonify, g
 
 from database import get_db
@@ -16,9 +18,12 @@ from chat.rate_limit import check_chat_rate_limit
 from projects.state import is_code_file, persist_generated_code, sync_current_code_cache
 
 WRITE_TOOL_NAMES = {'write_file', 'append_file'}
+MAX_REVIEW_FILES = 3
+MAX_REVIEW_DIFF_LINES = 18
+MAX_REVIEW_CHARS = 1800
 
 
-def _normalize_changed_files(tool_calls, created_files):
+def _collect_changed_file_entries(tool_calls, created_files):
     """Combine file changes from tool execution and parsed filename blocks."""
     changed = {}
 
@@ -28,7 +33,9 @@ def _normalize_changed_files(tool_calls, created_files):
             continue
         changed[filename] = {
             'filename': filename,
-            'action': file_info.get('action', 'updated')
+            'action': file_info.get('action', 'updated'),
+            'before_content': file_info.get('before_content'),
+            'after_content': file_info.get('after_content')
         }
 
     for tool_call in tool_calls or []:
@@ -38,15 +45,145 @@ def _normalize_changed_files(tool_calls, created_files):
         filename = tool_input.get('filename')
         if tool_name not in WRITE_TOOL_NAMES or not filename or tool_result.get('success') is False:
             continue
-        changed[filename] = {
-            'filename': filename,
-            'action': tool_result.get('action', 'updated')
-        }
+        entry = changed.setdefault(filename, {'filename': filename})
+        entry['action'] = tool_result.get('action', entry.get('action', 'updated'))
 
     return list(changed.values())
 
 
-def _build_assistant_message(explanation, changed_files, primary_file, suggestions, tool_calls):
+def _hydrate_changed_file_contents(project_id, changed_files):
+    """Fill in post-change file contents from the database when available."""
+    filenames = [file_info.get('filename') for file_info in changed_files if file_info.get('filename')]
+    if not filenames:
+        return changed_files
+
+    placeholders = ','.join('?' for _ in filenames)
+    with get_db() as db:
+        db.execute(
+            f'''
+                SELECT filename, content FROM project_files
+                WHERE project_id = ? AND filename IN ({placeholders})
+            ''',
+            (project_id, *filenames)
+        )
+        file_contents = {row['filename']: row['content'] for row in db.fetchall()}
+
+    hydrated = []
+    for file_info in changed_files:
+        filename = file_info.get('filename')
+        entry = dict(file_info)
+        if entry.get('after_content') is None and filename in file_contents:
+            entry['after_content'] = file_contents[filename]
+        hydrated.append(entry)
+
+    return hydrated
+
+
+def _trim_review_text(text):
+    trimmed = (text or '').strip('\n')
+    if len(trimmed) <= MAX_REVIEW_CHARS:
+        return trimmed, False
+    return trimmed[:MAX_REVIEW_CHARS].rstrip() + '\n…', True
+
+
+def _format_line_count(count):
+    return f'{count} line' if count == 1 else f'{count} lines'
+
+
+def _build_diff_excerpt(before_content, after_content, action):
+    before_lines = (before_content or '').splitlines()
+    after_lines = (after_content or '').splitlines()
+    normalized_action = (action or 'updated').lower()
+
+    if normalized_action == 'created':
+        diff_lines = [f'+ {line}' for line in after_lines[:MAX_REVIEW_DIFF_LINES]] or ['+ (empty file)']
+        truncated = len(after_lines) > MAX_REVIEW_DIFF_LINES
+        return '\n'.join(diff_lines + (['…'] if truncated else [])), truncated
+
+    if not before_lines and after_lines:
+        snapshot_lines = [f'  {line}' for line in after_lines[:MAX_REVIEW_DIFF_LINES]]
+        truncated = len(after_lines) > MAX_REVIEW_DIFF_LINES
+        return '\n'.join(snapshot_lines + (['…'] if truncated else [])), truncated
+
+    diff_lines = list(difflib.unified_diff(before_lines, after_lines, fromfile='before', tofile='after', n=1, lineterm=''))
+    filtered_lines = [line for line in diff_lines if not line.startswith('---') and not line.startswith('+++')]
+
+    if not filtered_lines:
+        fallback = '  File was rewritten, but the line diff is empty.'
+        return fallback, False
+
+    truncated = len(filtered_lines) > MAX_REVIEW_DIFF_LINES
+    excerpt = filtered_lines[:MAX_REVIEW_DIFF_LINES]
+    if truncated:
+        excerpt.append('…')
+
+    return '\n'.join(excerpt), truncated
+
+
+def _build_review_summary(before_content, after_content, action):
+    normalized_action = (action or 'updated').lower()
+    before_lines = (before_content or '').splitlines()
+    after_lines = (after_content or '').splitlines()
+
+    if normalized_action == 'created':
+        return f'New file • {_format_line_count(len(after_lines))}'
+
+    diff_lines = list(difflib.unified_diff(before_lines, after_lines, fromfile='before', tofile='after', n=1, lineterm=''))
+    added = sum(1 for line in diff_lines if line.startswith('+') and not line.startswith('+++'))
+    removed = sum(1 for line in diff_lines if line.startswith('-') and not line.startswith('---'))
+
+    if normalized_action == 'appended':
+        return f'Appended • {added} added'
+
+    if added or removed:
+        parts = []
+        if added:
+            parts.append(f'{added} added')
+        if removed:
+            parts.append(f'{removed} removed')
+        return ' • '.join(parts)
+
+    return f'Updated • {_format_line_count(len(after_lines))}'
+
+
+def _build_change_review(changed_files):
+    """Build a lightweight diff-ish review surface for the latest AI edits."""
+    review_entries = []
+
+    for file_info in changed_files[:MAX_REVIEW_FILES]:
+        filename = file_info.get('filename')
+        after_content = file_info.get('after_content')
+        if not filename or after_content is None:
+            continue
+
+        action = file_info.get('action', 'updated')
+        before_content = file_info.get('before_content') or ''
+        diff_excerpt, diff_truncated = _build_diff_excerpt(before_content, after_content, action)
+        diff_excerpt, char_truncated = _trim_review_text(diff_excerpt)
+
+        review_entries.append({
+            'filename': filename,
+            'action': action,
+            'summary': _build_review_summary(before_content, after_content, action),
+            'diff_excerpt': diff_excerpt,
+            'truncated': bool(diff_truncated or char_truncated)
+        })
+
+    return review_entries
+
+
+def _normalize_changed_files(changed_entries):
+    return [
+        {
+            'filename': file_info.get('filename'),
+            'action': file_info.get('action', 'updated')
+        }
+        for file_info in changed_entries
+        if file_info.get('filename')
+    ]
+
+
+def _build_assistant_message(explanation, changed_files, primary_file, suggestions, tool_calls, change_review):
     """Create a consistent markdown transcript for assistant messages."""
     lines = []
     summary = (explanation or '').strip() or 'I updated the project.'
@@ -58,6 +195,20 @@ def _build_assistant_message(explanation, changed_files, primary_file, suggestio
             action = (file_info.get('action') or 'updated').capitalize()
             filename = file_info.get('filename', 'unknown file')
             lines.append(f"- {action} `{filename}`")
+
+    if change_review:
+        lines.extend(['', '## Review'])
+        for review in change_review:
+            lines.append(f"### `{review['filename']}`")
+            lines.append(f"- Action: {(review.get('action') or 'updated').capitalize()}")
+            lines.append(f"- Summary: {review.get('summary', 'Updated file')}")
+            if review.get('truncated'):
+                lines.append('- Note: Preview trimmed for readability.')
+            lines.extend([
+                '```diff',
+                review.get('diff_excerpt', '').rstrip() or '  No preview available.',
+                '```'
+            ])
 
     if primary_file and (len(changed_files) > 1 or not changed_files or changed_files[0].get('filename') != primary_file):
         lines.extend(['', '## Start here', f"- Entry file: `{primary_file}`"])
@@ -174,7 +325,12 @@ def chat_with_ai(project_id):
         }), 500
 
     tool_calls = result.get('tool_calls', []) or []
-    changed_files = _normalize_changed_files(tool_calls, result.get('created_files', []))
+    changed_file_entries = _hydrate_changed_file_contents(
+        project_id,
+        _collect_changed_file_entries(tool_calls, result.get('created_files', []))
+    )
+    changed_files = _normalize_changed_files(changed_file_entries)
+    change_review = _build_change_review(changed_file_entries)
     write_tools_used = any(
         (tool_call.get('tool') or tool_call.get('name')) in WRITE_TOOL_NAMES
         and (tool_call.get('result') or {}).get('success') is not False
@@ -204,7 +360,8 @@ def chat_with_ai(project_id):
             changed_files,
             project_state.get('primary_file'),
             result.get('suggestions', []),
-            tool_calls
+            tool_calls,
+            change_review
         )
 
         db.execute('''
@@ -233,6 +390,7 @@ def chat_with_ai(project_id):
             'tool_calls': tool_calls,
             'created_files': changed_files,
             'changed_files': changed_files,
+            'change_review': change_review,
             'primary_file': project_state.get('primary_file')
         }
     })

@@ -125,9 +125,12 @@ class AIClient:
                     
                     # Track files created by write_file or append_file
                     if tool_name in ["write_file", "append_file"] and tool_result.get("success"):
+                        latest_change = file_tools.get_change_log()[-1] if file_tools.get_change_log() else {}
                         tool_created_files.append({
                             "filename": tool_input.get("filename", "unknown"),
-                            "action": tool_result.get("action", "created")
+                            "action": tool_result.get("action", "created"),
+                            "before_content": latest_change.get("before_content", ""),
+                            "after_content": latest_change.get("after_content", tool_input.get("content", ""))
                         })
                 
                 # Make a second call to get the AI's response after tool use
