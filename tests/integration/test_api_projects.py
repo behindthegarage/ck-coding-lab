@@ -447,6 +447,31 @@ class TestProjectFilesAPI:
 
         assert row['current_code'] == '<html><body>Created</body></html>'
 
+    def test_nested_index_file_can_become_primary_current_code(self, client, auth_headers, project_factory, db_path):
+        """Nested index files should still seed current_code when they are the best HTML entry candidate."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        response = client.post(
+            f'/api/projects/{project_id}/files',
+            headers=auth_headers,
+            json={'filename': 'pages/index.html', 'content': '<html><body>Nested entry</body></html>'}
+        )
+
+        assert response.status_code == 201
+        assert response.get_json()['file']['filename'] == 'pages/index.html'
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['current_code'] == '<html><body>Nested entry</body></html>'
+
     def test_updating_primary_code_file_syncs_project_current_code(self, client, auth_headers, project_factory, db_path):
         """File edits should keep projects.current_code aligned with the primary file."""
         import sqlite3
@@ -559,6 +584,26 @@ class TestProjectFilesAPI:
         conn.close()
 
         assert row['current_code'] == '<html><body>Rename me</body></html>'
+
+    def test_get_and_update_file_by_nested_path(self, client, auth_headers, project_factory):
+        """Nested file paths should work through the filename-based API routes."""
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        put_response = client.put(
+            f'/api/projects/{project_id}/files/js/player.js',
+            headers=auth_headers,
+            json={'content': 'export const speed = 3;'}
+        )
+        assert put_response.status_code == 200
+        assert put_response.get_json()['file']['filename'] == 'js/player.js'
+
+        get_response = client.get(
+            f'/api/projects/{project_id}/files/js/player.js',
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 200
+        assert get_response.get_json()['file']['content'] == 'export const speed = 3;'
 
     def test_deleting_primary_code_file_clears_current_code(self, client, auth_headers, project_factory, db_path):
         """Deleting the only primary code file should clear projects.current_code."""

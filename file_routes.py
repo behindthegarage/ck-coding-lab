@@ -50,13 +50,17 @@ def verify_project_access(project_id, user_id):
 
 
 def validate_filename(filename):
-    """Validate a project filename."""
+    """Validate a project filename or nested path."""
     filename = (filename or '').strip()
 
     if not filename or len(filename) > 255:
         return False, "Invalid filename"
 
-    if '/' in filename or '\\' in filename or '..' in filename:
+    if '\\' in filename or filename.startswith('/') or filename.endswith('/'):
+        return False, "Invalid filename"
+
+    segments = filename.split('/')
+    if any(not segment or segment in {'.', '..'} for segment in segments):
         return False, "Invalid filename"
 
     return True, filename
@@ -322,11 +326,15 @@ def delete_file(file_id):
     return jsonify({"success": True})
 
 
-@file_bp.route('/projects/<int:project_id>/files/<string:filename>', methods=['GET'])
+@file_bp.route('/projects/<int:project_id>/files/<path:filename>', methods=['GET'])
 @require_auth
 def get_file_by_name(project_id, filename):
     """Get a file by project_id and filename."""
     user_id = g.current_user['id']
+
+    is_valid, filename = validate_filename(filename)
+    if not is_valid:
+        return jsonify({"success": False, "error": filename}), 400
     
     if not verify_project_access(project_id, user_id):
         return jsonify({"success": False, "error": "Project not found"}), 404
@@ -346,7 +354,7 @@ def get_file_by_name(project_id, filename):
     return jsonify({"success": True, "file": file_data})
 
 
-@file_bp.route('/projects/<int:project_id>/files/<string:filename>', methods=['PUT'])
+@file_bp.route('/projects/<int:project_id>/files/<path:filename>', methods=['PUT'])
 @require_auth
 def update_file_by_name(project_id, filename):
     """Update or create a file by name (upsert)."""
@@ -357,6 +365,10 @@ def update_file_by_name(project_id, filename):
         return jsonify({"success": False, "error": "Content is required"}), 400
     
     content = data['content']
+
+    is_valid, filename = validate_filename(filename)
+    if not is_valid:
+        return jsonify({"success": False, "error": filename}), 400
     
     if not verify_project_access(project_id, user_id):
         return jsonify({"success": False, "error": "Project not found"}), 404

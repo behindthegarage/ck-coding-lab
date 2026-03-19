@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 44 - Three-pane workspace layout with keyboard shortcuts
+// Version 45 - Three-pane workspace layout with folders/nested paths in progress
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -24,6 +24,7 @@ let workspaceToastTimer = null;
 let fileSearchQuery = '';
 let activeFileMenuId = null;
 let fileSortMode = 'smart';
+let openFolderPaths = {};
 let sidebarCollapsed = false;
 let previewCollapsed = false;
 let latestAssistantChanges = {};
@@ -280,8 +281,20 @@ function getFileSortLabel() {
     return 'Smart';
 }
 
+function getFileBasename(filename = '') {
+    const parts = String(filename || '').split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : filename;
+}
+
+function getFileDirname(filename = '') {
+    const parts = String(filename || '').split('/').filter(Boolean);
+    if (parts.length <= 1) return '';
+    parts.pop();
+    return parts.join('/');
+}
+
 function getFileTypeLabel(filename = '') {
-    const lower = filename.toLowerCase();
+    const lower = getFileBasename(filename).toLowerCase();
     if (lower.endsWith('.html')) return 'html';
     if (lower.endsWith('.css')) return 'css';
     if (lower.endsWith('.js')) return 'js';
@@ -292,7 +305,8 @@ function getFileTypeLabel(filename = '') {
 }
 
 function getFilePriority(file) {
-    const name = (file.filename || '').toLowerCase();
+    const basename = getFileBasename(file.filename || '').toLowerCase();
+    const depth = (file.filename || '').split('/').length - 1;
     const entryPriority = {
         'index.html': 0,
         'style.css': 1,
@@ -308,7 +322,7 @@ function getFilePriority(file) {
         'todo.md': 5,
         'notes.md': 6,
     };
-    if (name in entryPriority) return entryPriority[name];
+    if (basename in entryPriority) return entryPriority[basename] + depth * 0.1;
 
     const typePriority = {
         html: 10,
@@ -320,7 +334,7 @@ function getFilePriority(file) {
         other: 40,
     };
 
-    return typePriority[getFileTypeLabel(name)] ?? 40;
+    return (typePriority[getFileTypeLabel(basename)] ?? 40) + depth * 0.1;
 }
 
 function sortProjectFiles(files) {
@@ -329,21 +343,64 @@ function sortProjectFiles(files) {
     sorted.sort((a, b) => {
         const aName = (a.filename || '').toLowerCase();
         const bName = (b.filename || '').toLowerCase();
+        const aBase = getFileBasename(aName);
+        const bBase = getFileBasename(bName);
 
         if (fileSortMode === 'name') {
-            return aName.localeCompare(bName);
+            return aBase.localeCompare(bBase) || aName.localeCompare(bName);
         }
 
         if (fileSortMode === 'type') {
             const typeCompare = getFileTypeLabel(aName).localeCompare(getFileTypeLabel(bName));
-            return typeCompare || aName.localeCompare(bName);
+            return typeCompare || aBase.localeCompare(bBase) || aName.localeCompare(bName);
         }
 
         const priorityCompare = getFilePriority(a) - getFilePriority(b);
-        return priorityCompare || aName.localeCompare(bName);
+        return priorityCompare || aBase.localeCompare(bBase) || aName.localeCompare(bName);
     });
 
     return sorted;
+}
+
+function isFolderOpen(path) {
+    if (!path) return true;
+    return openFolderPaths[path] !== false;
+}
+
+function setFolderOpen(path, open) {
+    if (!path) return;
+    openFolderPaths[path] = open;
+}
+
+function toggleFolderOpen(path) {
+    setFolderOpen(path, !isFolderOpen(path));
+    loadFileTree();
+}
+
+function buildProjectFileTree(files) {
+    const root = { folders: new Map(), files: [] };
+
+    files.forEach((file) => {
+        const segments = String(file.filename || '').split('/').filter(Boolean);
+        if (!segments.length) return;
+
+        let node = root;
+        let currentPath = '';
+        segments.slice(0, -1).forEach((segment) => {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            if (!node.folders.has(segment)) {
+                node.folders.set(segment, { name: segment, path: currentPath, folders: new Map(), files: [] });
+                if (!(currentPath in openFolderPaths)) {
+                    openFolderPaths[currentPath] = true;
+                }
+            }
+            node = node.folders.get(segment);
+        });
+
+        node.files.push(file);
+    });
+
+    return root;
 }
 
 function updateFileSearchUI() {
@@ -512,12 +569,133 @@ async function handleFileMenuAction(action, fileId) {
     }
 }
 
+function createFileTreeItem(file, depth = 0) {
+    const fileEl = document.createElement('div');
+    fileEl.className = 'file-item';
+    fileEl.dataset.fileId = file.id;
+    fileEl.dataset.filename = file.filename;
+    fileEl.style.setProperty('--tree-depth', depth);
+
+    if (String(currentFileId) === String(file.id)) {
+        fileEl.classList.add('active');
+    }
+    if (String(activeFileMenuId) === String(file.id)) {
+        fileEl.classList.add('menu-open');
+    }
+
+    const basename = getFileBasename(file.filename);
+    let icon = '📄';
+    let badge = '';
+
+    if (basename.endsWith('.md')) {
+        icon = '📝';
+        if (['design.md', 'architecture.md', 'todo.md', 'notes.md'].includes(basename)) {
+            icon = '📋';
+        }
+    } else if (basename.endsWith('.js')) {
+        icon = '📜';
+        badge = 'JS';
+        fileEl.classList.add('code-file');
+    } else if (basename.endsWith('.py')) {
+        icon = '🐍';
+        badge = 'PY';
+        fileEl.classList.add('code-file');
+    } else if (basename.endsWith('.html')) {
+        icon = '🌐';
+        badge = 'HTML';
+        fileEl.classList.add('code-file');
+    } else if (basename.endsWith('.css')) {
+        icon = '🎨';
+        badge = 'CSS';
+        fileEl.classList.add('code-file');
+    }
+
+    const recentChange = getLatestAssistantChange(file.filename);
+    const recentBadge = recentChange
+        ? `<span class="file-recent-badge ${escapeHtml(recentChange.action)}" title="Hari recently ${escapeHtml(recentChange.action.replace(/_/g, ' '))} this file">${escapeHtml(getRecentChangeBadgeLabel(recentChange.action))}</span>`
+        : '';
+    const subpath = getFileDirname(file.filename);
+    const subpathLabel = subpath ? `<span class="file-subpath">${escapeHtml(subpath)}</span>` : '';
+
+    fileEl.innerHTML = `
+        <div class="file-item-main">
+            <span class="file-icon">${icon}</span>
+            <span class="file-name-wrap">
+                <span class="file-name">${escapeHtml(basename)}</span>
+                ${subpathLabel}
+            </span>
+            ${recentBadge}
+            ${badge ? `<span class="file-badge">${badge}</span>` : ''}
+        </div>
+        <div class="file-item-actions">
+            <button class="file-menu-toggle" type="button" aria-label="File actions">⋯</button>
+            <div class="file-action-menu">
+                <button class="file-action-menu-item" type="button" data-file-action="open">Open</button>
+                <button class="file-action-menu-item" type="button" data-file-action="rename">Rename</button>
+                <button class="file-action-menu-item danger" type="button" data-file-action="delete">Delete</button>
+            </div>
+        </div>
+    `;
+
+    fileEl.querySelector('.file-item-main').addEventListener('click', async () => {
+        closeAllFileMenus();
+        await viewFile(file.id, file.filename);
+    });
+
+    fileEl.querySelector('.file-menu-toggle').addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleFileMenu(file.id);
+    });
+
+    fileEl.querySelectorAll('.file-action-menu-item').forEach((button) => {
+        button.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            await handleFileMenuAction(button.dataset.fileAction, file.id);
+        });
+    });
+
+    return fileEl;
+}
+
+function renderProjectFileTree(node, container, depth = 0) {
+    const folders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const files = sortProjectFiles(node.files);
+
+    folders.forEach((folder) => {
+        const folderEl = document.createElement('div');
+        folderEl.className = 'folder-group';
+        folderEl.style.setProperty('--tree-depth', depth);
+
+        const header = document.createElement('button');
+        header.className = 'folder-row';
+        header.type = 'button';
+        header.innerHTML = `
+            <span class="folder-chevron">${isFolderOpen(folder.path) ? '▾' : '▸'}</span>
+            <span class="folder-icon">📁</span>
+            <span class="folder-name">${escapeHtml(folder.name)}</span>
+        `;
+        header.addEventListener('click', () => toggleFolderOpen(folder.path));
+        folderEl.appendChild(header);
+
+        const children = document.createElement('div');
+        children.className = 'folder-children';
+        children.classList.toggle('hidden', !isFolderOpen(folder.path));
+        renderProjectFileTree(folder, children, depth + 1);
+        folderEl.appendChild(children);
+        container.appendChild(folderEl);
+    });
+
+    files.forEach((file) => {
+        container.appendChild(createFileTreeItem(file, depth));
+    });
+}
+
 // Load file tree in sidebar
 function loadFileTree() {
     const container = document.getElementById('file-tree');
     const filteredFiles = getFilteredProjectFiles();
     updateFileSearchUI();
-    
+
     if (projectFiles.length === 0) {
         container.innerHTML = '<div class="file-loading">No files yet</div>';
         return;
@@ -528,90 +706,20 @@ function loadFileTree() {
         container.innerHTML = `<div class="file-loading">No files match “${safeQuery}”.</div>`;
         return;
     }
-    
+
+    if (fileSearchQuery.trim()) {
+        const tree = buildProjectFileTree(filteredFiles);
+        Object.keys(openFolderPaths).forEach((path) => {
+            openFolderPaths[path] = true;
+        });
+        container.innerHTML = '';
+        renderProjectFileTree(tree, container, 0);
+        return;
+    }
+
+    const tree = buildProjectFileTree(filteredFiles);
     container.innerHTML = '';
-    
-    filteredFiles.forEach(file => {
-        const fileEl = document.createElement('div');
-        fileEl.className = 'file-item';
-        fileEl.dataset.fileId = file.id;
-        fileEl.dataset.filename = file.filename;
-
-        if (String(currentFileId) === String(file.id)) {
-            fileEl.classList.add('active');
-        }
-        if (String(activeFileMenuId) === String(file.id)) {
-            fileEl.classList.add('menu-open');
-        }
-        
-        // Determine icon and badge
-        let icon = '📄';
-        let badge = '';
-        
-        if (file.filename.endsWith('.md')) {
-            icon = '📝';
-            if (['design.md', 'architecture.md', 'todo.md', 'notes.md'].includes(file.filename)) {
-                icon = '📋';
-            }
-        } else if (file.filename.endsWith('.js')) {
-            icon = '📜';
-            badge = 'JS';
-            fileEl.classList.add('code-file');
-        } else if (file.filename.endsWith('.py')) {
-            icon = '🐍';
-            badge = 'PY';
-            fileEl.classList.add('code-file');
-        } else if (file.filename.endsWith('.html')) {
-            icon = '🌐';
-            badge = 'HTML';
-            fileEl.classList.add('code-file');
-        } else if (file.filename.endsWith('.css')) {
-            icon = '🎨';
-            badge = 'CSS';
-            fileEl.classList.add('code-file');
-        }
-
-        const recentChange = getLatestAssistantChange(file.filename);
-        const recentBadge = recentChange
-            ? `<span class="file-recent-badge ${escapeHtml(recentChange.action)}" title="Hari recently ${escapeHtml(recentChange.action.replace(/_/g, ' '))} this file">${escapeHtml(getRecentChangeBadgeLabel(recentChange.action))}</span>`
-            : '';
-        
-        fileEl.innerHTML = `
-            <div class="file-item-main">
-                <span class="file-icon">${icon}</span>
-                <span class="file-name">${escapeHtml(file.filename)}</span>
-                ${recentBadge}
-                ${badge ? `<span class="file-badge">${badge}</span>` : ''}
-            </div>
-            <div class="file-item-actions">
-                <button class="file-menu-toggle" type="button" aria-label="File actions">⋯</button>
-                <div class="file-action-menu">
-                    <button class="file-action-menu-item" type="button" data-file-action="open">Open</button>
-                    <button class="file-action-menu-item" type="button" data-file-action="rename">Rename</button>
-                    <button class="file-action-menu-item danger" type="button" data-file-action="delete">Delete</button>
-                </div>
-            </div>
-        `;
-
-        fileEl.querySelector('.file-item-main').addEventListener('click', async () => {
-            closeAllFileMenus();
-            await viewFile(file.id, file.filename);
-        });
-
-        fileEl.querySelector('.file-menu-toggle').addEventListener('click', (event) => {
-            event.stopPropagation();
-            toggleFileMenu(file.id);
-        });
-
-        fileEl.querySelectorAll('.file-action-menu-item').forEach((button) => {
-            button.addEventListener('click', async (event) => {
-                event.stopPropagation();
-                await handleFileMenuAction(button.dataset.fileAction, file.id);
-            });
-        });
-        
-        container.appendChild(fileEl);
-    });
+    renderProjectFileTree(tree, container, 0);
 }
 
 function setFileSearchQuery(value = '') {
@@ -651,8 +759,13 @@ function validateFilenameInput(filename, { existingId = null } = {}) {
         return 'Filename is required.';
     }
 
-    if (value.includes('/') || value.includes('\\') || value.includes('..')) {
-        return 'Filename cannot include folders or ..';
+    if (value.includes('\\') || value.startsWith('/') || value.endsWith('/')) {
+        return 'Use a project path like js/player.js, not an absolute path.';
+    }
+
+    const segments = value.split('/');
+    if (segments.some(segment => !segment || segment === '.' || segment === '..')) {
+        return 'Use folder/file names only — no empty parts, . or ..';
     }
 
     if (projectFiles.some(file => String(file.id) !== String(existingId) && file.filename === value)) {
@@ -1699,12 +1812,12 @@ function setupUploadDropzone() {
 async function createNewFile() {
     const action = await showFileActionDialog({
         title: 'Create new file',
-        message: 'Add a new file to this project. You can start with something like helper.js, styles.css, or level2.html.',
+        message: 'Add a new file to this project. You can use folders too, like js/player.js, css/styles.css, or levels/level2.html.',
         confirmLabel: 'Create file',
         confirmClass: 'btn-primary',
         initialValue: '',
         inputLabel: 'Filename',
-        placeholder: 'helper.js',
+        placeholder: 'js/player.js',
         needsInput: true,
         validate: (value) => validateFilenameInput(value)
     });

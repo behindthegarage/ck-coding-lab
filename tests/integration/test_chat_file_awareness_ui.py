@@ -36,5 +36,5 @@ class TestChatFileAwarenessSurface:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert '/lab/static/css/workspace.css?v=39' in html
-        assert '/lab/static/js/workspace.js?v=44' in html
+        assert '/lab/static/css/workspace.css?v=40' in html
+        assert '/lab/static/js/workspace.js?v=45' in html

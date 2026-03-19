@@ -11,6 +11,7 @@ Model:
 """
 
 import json
+import posixpath
 from typing import Dict, Optional, Tuple
 
 
@@ -57,18 +58,34 @@ def choose_primary_code_file(language: Optional[str], project_files: Dict[str, s
     if not project_files:
         return None
 
-    for filename in PRIMARY_FILE_CANDIDATES.get(language or 'undecided', PRIMARY_FILE_CANDIDATES['undecided']):
-        if filename in project_files and is_code_file(filename):
-            return filename
-
     code_files = sorted(filename for filename in project_files if is_code_file(filename))
+    if not code_files:
+        return None
+
+    def _candidate_rank(filename: str, wanted: str):
+        basename = posixpath.basename(filename)
+        if filename == wanted:
+            return (0, filename.count('/'), filename)
+        if basename == wanted:
+            return (1, filename.count('/'), filename)
+        return None
+
+    for wanted in PRIMARY_FILE_CANDIDATES.get(language or 'undecided', PRIMARY_FILE_CANDIDATES['undecided']):
+        ranked = [(_candidate_rank(filename, wanted), filename) for filename in code_files]
+        ranked = [item for item in ranked if item[0] is not None]
+        if ranked:
+            ranked.sort(key=lambda item: item[0])
+            return ranked[0][1]
+
     if len(code_files) == 1:
         return code_files[0]
-    if 'index.html' in project_files:
-        return 'index.html'
-    if code_files:
-        return code_files[0]
-    return None
+
+    index_candidates = [filename for filename in code_files if posixpath.basename(filename) == 'index.html']
+    if index_candidates:
+        index_candidates.sort(key=lambda filename: (filename.count('/'), filename))
+        return index_candidates[0]
+
+    return code_files[0]
 
 
 def build_project_state(
