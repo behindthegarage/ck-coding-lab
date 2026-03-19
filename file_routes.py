@@ -298,7 +298,7 @@ def delete_file(file_id):
     with get_db() as db:
         # Verify ownership through project
         db.execute('''
-            SELECT pf.id, pf.project_id, pf.filename, p.user_id as project_owner_id,
+            SELECT pf.id, pf.project_id, pf.filename, pf.content, p.user_id as project_owner_id,
                    p.language, p.current_code
             FROM project_files pf
             JOIN projects p ON pf.project_id = p.id
@@ -323,7 +323,15 @@ def delete_file(file_id):
             touch_project=True
         )
     
-    return jsonify({"success": True})
+    return jsonify({
+        "success": True,
+        "deleted_file": {
+            "id": row['id'],
+            "project_id": row['project_id'],
+            "filename": row['filename'],
+            "content": row['content'] or '',
+        }
+    })
 
 
 @file_bp.route('/projects/<int:project_id>/files/<path:filename>', methods=['GET'])

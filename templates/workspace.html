@@ -198,7 +198,13 @@
         </div>
     </div>
 
-    <div id="workspace-toast" class="workspace-toast hidden" role="status" aria-live="polite"></div>
+    <div id="workspace-toast" class="workspace-toast hidden" role="status" aria-live="polite">
+        <div id="workspace-toast-message" class="workspace-toast-message"></div>
+        <div id="workspace-toast-actions" class="workspace-toast-actions hidden">
+            <button id="workspace-toast-action" class="btn-small workspace-toast-action" type="button">Undo</button>
+            <button id="workspace-toast-dismiss" class="btn-small workspace-toast-dismiss" type="button">Dismiss</button>
+        </div>
+    </div>
 
     <!-- Keyboard Shortcuts Modal -->
     <div id="shortcuts-modal" class="modal hidden" aria-hidden="true">
@@ -276,6 +282,6 @@
     <script src="/lab/static/js/sandbox.js?v=27"></script>
     <script src="/lab/static/js/workspace.js?v=46"></script>
     <script src="/lab/static/js/workspace-preview.js?v=2"></script>
-    <script src="/lab/static/js/workspace-versions.js?v=2"></script>
+    <script src="/lab/static/js/workspace-versions.js?v=3"></script>
 </body>
 </html>

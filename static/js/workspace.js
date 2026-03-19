@@ -21,6 +21,7 @@ let currentFileOriginalContent = '';
 let fileModalSaving = false;
 let fileActionDialogState = null;
 let workspaceToastTimer = null;
+let workspaceToastActionState = null;
 let fileSearchQuery = '';
 let activeFileMenuId = null;
 let fileSortMode = 'smart';
@@ -516,6 +517,26 @@ async function renameProjectFileById(fileId) {
     showWorkspaceToast(`Renamed to ${data.file.filename}.`, 'success');
 }
 
+async function restoreDeletedFile(deletedFile) {
+    if (!deletedFile || !deletedFile.filename) return;
+
+    const data = await apiRequest(`/projects/${projectId}/files`, {
+        method: 'POST',
+        body: {
+            filename: deletedFile.filename,
+            content: deletedFile.content || ''
+        }
+    });
+
+    if (!data || !data.success) {
+        showWorkspaceToast(data?.error || `Couldn't restore ${deletedFile.filename}.`, 'error', 4200);
+        return;
+    }
+
+    await refreshWorkspaceAfterFileSave();
+    showWorkspaceToast(`Restored ${data.file.filename}.`, 'success');
+}
+
 async function deleteProjectFileById(fileId) {
     const file = getProjectFileById(fileId);
     if (!file) return;
@@ -527,7 +548,7 @@ async function deleteProjectFileById(fileId) {
 
     const action = await showFileActionDialog({
         title: 'Delete file',
-        message: `Delete ${file.filename}? If you saved a version first, you can restore it later from Version History.`,
+        message: `Delete ${file.filename}? You can undo this right after deleting if you change your mind.`,
         confirmLabel: 'Delete file',
         confirmClass: 'btn-small file-modal-danger',
         needsInput: false
@@ -545,7 +566,13 @@ async function deleteProjectFileById(fileId) {
     }
 
     await refreshWorkspaceAfterFileSave();
-    showWorkspaceToast(`Deleted ${file.filename}.`, 'success');
+    showWorkspaceToast(`Deleted ${file.filename}.`, 'success', 8000, {
+        actionLabel: 'Undo',
+        closeOnAction: false,
+        onAction: async () => {
+            await restoreDeletedFile(data.deleted_file || file);
+        }
+    });
 }
 
 async function handleFileMenuAction(action, fileId) {
@@ -819,21 +846,125 @@ function submitFileActionDialog() {
     closeFileActionDialog({ confirmed: true, value });
 }
 
-function showWorkspaceToast(message, type = 'info', durationMs = 3200) {
+function hideWorkspaceToast() {
     const toast = document.getElementById('workspace-toast');
-    if (!toast || !message) return;
+    const messageEl = document.getElementById('workspace-toast-message');
+    const actionsEl = document.getElementById('workspace-toast-actions');
+    const actionBtn = document.getElementById('workspace-toast-action');
 
     if (workspaceToastTimer) {
         clearTimeout(workspaceToastTimer);
+        workspaceToastTimer = null;
     }
 
-    toast.textContent = message;
+    workspaceToastActionState = null;
+
+    if (messageEl) {
+        messageEl.textContent = '';
+    }
+
+    if (actionsEl) {
+        actionsEl.classList.add('hidden');
+    }
+
+    if (actionBtn) {
+        actionBtn.disabled = false;
+        actionBtn.textContent = 'Undo';
+    }
+
+    if (toast) {
+        toast.className = 'workspace-toast hidden';
+    }
+}
+
+async function handleWorkspaceToastAction() {
+    const actionBtn = document.getElementById('workspace-toast-action');
+    if (!workspaceToastActionState || typeof workspaceToastActionState.onAction !== 'function' || !actionBtn) {
+        return;
+    }
+
+    if (workspaceToastActionState.pending) {
+        return;
+    }
+
+    const { actionLabel, onAction, closeOnAction = true } = workspaceToastActionState;
+    workspaceToastActionState.pending = true;
+    actionBtn.disabled = true;
+    actionBtn.textContent = `${actionLabel || 'Working'}...`;
+
+    try {
+        await onAction();
+        if (closeOnAction) {
+            hideWorkspaceToast();
+        }
+    } catch (error) {
+        console.error('Toast action failed:', error);
+        showWorkspaceToast(error.message || 'That action failed.', 'error', 4200);
+    } finally {
+        if (workspaceToastActionState) {
+            workspaceToastActionState.pending = false;
+        }
+        if (actionBtn && document.body.contains(actionBtn)) {
+            actionBtn.disabled = false;
+            actionBtn.textContent = actionLabel || 'Undo';
+        }
+    }
+}
+
+function initializeWorkspaceToast() {
+    const actionBtn = document.getElementById('workspace-toast-action');
+    const dismissBtn = document.getElementById('workspace-toast-dismiss');
+
+    if (actionBtn) {
+        actionBtn.addEventListener('click', handleWorkspaceToastAction);
+    }
+
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', hideWorkspaceToast);
+    }
+}
+
+function showWorkspaceToast(message, type = 'info', durationMs = 3200, options = {}) {
+    const toast = document.getElementById('workspace-toast');
+    if (!toast || !message) return;
+
+    const messageEl = document.getElementById('workspace-toast-message');
+    const actionsEl = document.getElementById('workspace-toast-actions');
+    const actionBtn = document.getElementById('workspace-toast-action');
+
+    if (workspaceToastTimer) {
+        clearTimeout(workspaceToastTimer);
+        workspaceToastTimer = null;
+    }
+
+    workspaceToastActionState = null;
+
+    if (messageEl) {
+        messageEl.textContent = message;
+    } else {
+        toast.textContent = message;
+    }
+
     toast.className = `workspace-toast ${type}`;
 
+    if (options.actionLabel && typeof options.onAction === 'function' && actionsEl && actionBtn) {
+        workspaceToastActionState = {
+            actionLabel: options.actionLabel,
+            onAction: options.onAction,
+            closeOnAction: options.closeOnAction !== false,
+            pending: false,
+        };
+        actionBtn.disabled = false;
+        actionBtn.textContent = options.actionLabel;
+        actionsEl.classList.remove('hidden');
+    } else if (actionsEl && actionBtn) {
+        actionsEl.classList.add('hidden');
+        actionBtn.disabled = false;
+        actionBtn.textContent = 'Undo';
+    }
+
     workspaceToastTimer = setTimeout(() => {
-        toast.textContent = '';
-        toast.className = 'workspace-toast hidden';
-        workspaceToastTimer = null;
+        hideWorkspaceToast();
     }, durationMs);
 }
 
@@ -1108,7 +1239,7 @@ async function deleteCurrentFile() {
 
     const action = await showFileActionDialog({
         title: 'Delete file',
-        message: `Delete ${file.filename}? If you saved a version first, you can restore it later from Version History.`,
+        message: `Delete ${file.filename}? You can undo this right after deleting if you change your mind.`,
         confirmLabel: 'Delete file',
         confirmClass: 'btn-small file-modal-danger',
         needsInput: false
@@ -1132,6 +1263,13 @@ async function deleteCurrentFile() {
 
         await closeFileModal(true);
         await refreshWorkspaceAfterFileSave();
+        showWorkspaceToast(`Deleted ${file.filename}.`, 'success', 8000, {
+            actionLabel: 'Undo',
+            closeOnAction: false,
+            onAction: async () => {
+                await restoreDeletedFile(data.deleted_file || file);
+            }
+        });
     } catch (error) {
         console.error('Error deleting file:', error);
         setFileModalStatus(error.message || 'Failed to delete file.', 'error');
@@ -2250,6 +2388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', handleGlobalWorkspaceShortcuts);
 
     applyShortcutHints();
+    initializeWorkspaceToast();
     updateFileModalSaveState();
     
     // New file button

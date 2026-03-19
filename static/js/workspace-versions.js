@@ -2,8 +2,21 @@
 
 window.__ckclVersions = window.__ckclVersions || [];
 
+const RECOVERY_VERSION_PREFIX = '__ckcl_recovery__:';
+
+function isRecoveryVersion(versionOrDescription) {
+    const description = typeof versionOrDescription === 'string'
+        ? versionOrDescription
+        : versionOrDescription?.description;
+    return (description || '').startsWith(RECOVERY_VERSION_PREFIX);
+}
+
 function getWorkspaceVersions() {
     return window.__ckclVersions || [];
+}
+
+function getVisibleWorkspaceVersions() {
+    return getWorkspaceVersions().filter(version => !isRecoveryVersion(version));
 }
 
 function setWorkspaceVersions(nextVersions) {
@@ -12,7 +25,7 @@ function setWorkspaceVersions(nextVersions) {
 }
 
 function getCurrentSavedVersion() {
-    return getWorkspaceVersions().find(version => version.matches_live_state) || null;
+    return getVisibleWorkspaceVersions().find(version => version.matches_live_state) || null;
 }
 
 function hasAnyRunnableProjectState() {
@@ -189,7 +202,7 @@ function renderVersionsList() {
 
     renderVersionsSummary();
 
-    const versions = getWorkspaceVersions();
+    const versions = getVisibleWorkspaceVersions();
     if (versions.length === 0) {
         container.innerHTML = '<div class="file-loading">No saved versions yet.</div>';
         return;
@@ -244,6 +257,47 @@ function renderVersionsList() {
             await restoreVersion(version, btn);
         });
     });
+}
+
+async function createRecoveryVersion(reason = 'Before risky workspace action') {
+    const description = `${RECOVERY_VERSION_PREFIX}${reason}`;
+    const data = await apiRequest(`/projects/${projectId}/versions`, {
+        method: 'POST',
+        body: { description }
+    });
+
+    if (!data || !data.success) {
+        return {
+            success: false,
+            error: data?.error || 'Failed to save a recovery point.'
+        };
+    }
+
+    return {
+        success: true,
+        versionId: data.version_id,
+    };
+}
+
+async function undoWorkspaceRecovery(versionId, label = 'your previous project state') {
+    if (!versionId) {
+        showWorkspaceToast('No recovery point is available for that undo.', 'error', 4200);
+        return;
+    }
+
+    const data = await apiRequest(`/projects/${projectId}/versions/${versionId}/restore`, {
+        method: 'POST'
+    });
+
+    if (!data || !data.success) {
+        showWorkspaceToast(data?.error || 'Failed to undo that change.', 'error', 4200);
+        return;
+    }
+
+    await closeFileModal(true);
+    await loadProject();
+    await loadVersions();
+    showWorkspaceToast(`Restored ${label}.`, 'success');
 }
 
 async function loadVersions() {
@@ -308,9 +362,28 @@ async function restoreVersion(version, buttonEl) {
         buttonEl.textContent = 'Restoring...';
     }
 
-    setVersionsStatus('Restoring version...', 'info');
+    setVersionsStatus('Saving a recovery point...', 'info');
+
+    let recoveryVersionId = null;
 
     try {
+        if (!version.matches_live_state && hasAnyRunnableProjectState()) {
+            const recovery = await createRecoveryVersion(`Before restoring ${description}`);
+            if (!recovery.success) {
+                const isNoCodeProject = (recovery.error || '').toLowerCase().includes('no code to save');
+                if (!isNoCodeProject) {
+                    const message = `Couldn't create a safety net, so the restore was canceled. ${recovery.error}`;
+                    setVersionsStatus(message, 'error');
+                    showWorkspaceToast(message, 'error', 5200);
+                    return;
+                }
+            } else {
+                recoveryVersionId = recovery.versionId;
+            }
+        }
+
+        setVersionsStatus('Restoring version...', 'info');
+
         const data = await apiRequest(`/projects/${projectId}/versions/${version.id}/restore`, {
             method: 'POST'
         });
@@ -324,7 +397,18 @@ async function restoreVersion(version, buttonEl) {
         await loadProject();
         await loadVersions();
         setVersionsStatus(`Restored "${description}".`, 'success');
-        showWorkspaceToast(`Restored "${description}".`, 'success');
+
+        if (recoveryVersionId) {
+            showWorkspaceToast(`Restored "${description}".`, 'success', 9000, {
+                actionLabel: 'Undo',
+                closeOnAction: false,
+                onAction: async () => {
+                    await undoWorkspaceRecovery(recoveryVersionId, 'the project from right before restore');
+                }
+            });
+        } else {
+            showWorkspaceToast(`Restored "${description}".`, 'success');
+        }
     } catch (error) {
         console.error('Error restoring version:', error);
         const message = error.message || 'Failed to restore that version.';

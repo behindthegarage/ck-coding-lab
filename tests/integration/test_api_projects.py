@@ -639,3 +639,34 @@ class TestProjectFilesAPI:
         conn.close()
 
         assert row['current_code'] == ''
+
+    def test_delete_file_returns_deleted_file_payload_for_undo(self, client, auth_headers, project_factory, db_path):
+        """Deleting a file should return enough data for the UI to offer an immediate undo."""
+        import sqlite3
+
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO project_files (project_id, filename, content)
+            VALUES (?, ?, ?)
+        ''', (project_id, 'notes.md', '# Keep me safe'))
+        file_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.delete(
+            f'/api/files/{file_id}',
+            headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['deleted_file']['id'] == file_id
+        assert data['deleted_file']['project_id'] == project_id
+        assert data['deleted_file']['filename'] == 'notes.md'
+        assert data['deleted_file']['content'] == '# Keep me safe'
