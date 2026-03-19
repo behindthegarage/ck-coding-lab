@@ -1,5 +1,5 @@
 // workspace.js - Three-pane layout with collapsible panels
-// Version 46 - Three-pane workspace layout with AI edit review cards
+// Version 47 - Three-pane workspace layout with AI edit review cards
 
 // Redirect if not logged in
 if (!isLoggedIn()) {
@@ -18,6 +18,7 @@ let sandboxRunner = null;
 let pendingUpload = null;
 let currentFileId = null;
 let currentFileOriginalContent = '';
+let currentFileLoadToken = 0;
 let fileModalSaving = false;
 let fileActionDialogState = null;
 let workspaceToastTimer = null;
@@ -1075,6 +1076,16 @@ async function refreshWorkspaceAfterFileSave() {
     }
 }
 
+function isStaleFileLoadRequest(loadToken, fileId) {
+    const modal = document.getElementById('file-modal');
+    return (
+        loadToken !== currentFileLoadToken
+        || String(currentFileId) !== String(fileId)
+        || !modal
+        || modal.classList.contains('hidden')
+    );
+}
+
 // View a file's contents (opens in editable modal)
 async function viewFile(fileId, filename) {
     const fileModal = document.getElementById('file-modal');
@@ -1085,6 +1096,7 @@ async function viewFile(fileId, filename) {
         }
     }
 
+    const loadToken = ++currentFileLoadToken;
     currentFileId = fileId;
     currentFileOriginalContent = 'Loading...';
 
@@ -1107,20 +1119,35 @@ async function viewFile(fileId, filename) {
     setFileModalStatus('Loading file...', 'info');
     updateFileModalSaveState();
 
-    // Fetch file content
-    const data = await apiRequest(`/files/${fileId}`);
+    try {
+        const data = await apiRequest(`/files/${fileId}`);
+        if (isStaleFileLoadRequest(loadToken, fileId)) {
+            return;
+        }
 
-    if (data && data.success) {
-        currentFileOriginalContent = data.file.content || '';
-        modalEditor.value = currentFileOriginalContent;
-        setFileModalStatus('', 'info');
-        updateFileModalSaveState();
-        modalEditor.focus();
-        modalEditor.setSelectionRange(0, 0);
-    } else {
+        if (data && data.success) {
+            currentFileOriginalContent = data.file.content || '';
+            modalEditor.value = currentFileOriginalContent;
+            setFileModalStatus('', 'info');
+            updateFileModalSaveState();
+            modalEditor.focus();
+            modalEditor.setSelectionRange(0, 0);
+            return;
+        }
+
         modalEditor.value = '';
         currentFileOriginalContent = '';
         setFileModalStatus(data?.error || 'Error loading file.', 'error');
+        updateFileModalSaveState();
+    } catch (error) {
+        if (isStaleFileLoadRequest(loadToken, fileId)) {
+            return;
+        }
+
+        console.error('Error loading file:', error);
+        modalEditor.value = '';
+        currentFileOriginalContent = '';
+        setFileModalStatus(error.message || 'Error loading file.', 'error');
         updateFileModalSaveState();
     }
 }
@@ -1292,6 +1319,7 @@ async function closeFileModal(force = false) {
     document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
     document.getElementById('modal-file-editor').value = '';
     setFileModalStatus('', 'info');
+    currentFileLoadToken += 1;
     currentFileId = null;
     currentFileOriginalContent = '';
     fileModalSaving = false;

@@ -18,7 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=41' in html
-        assert '/lab/static/js/workspace.js?v=46' in html
+        assert '/lab/static/js/workspace.js?v=47' in html
         assert '/lab/static/js/workspace-versions.js?v=3' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
@@ -32,6 +32,19 @@ class TestWorkspaceRecoverySurface:
         assert 'async function handleWorkspaceToastAction()' in js
         assert 'function initializeWorkspaceToast()' in js
         assert 'You can undo this right after deleting if you change your mind.' in js
+
+    def test_workspace_script_ignores_stale_file_loads_before_updating_modal_state(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'let currentFileLoadToken = 0;' in js
+        assert 'function isStaleFileLoadRequest(loadToken, fileId)' in js
+        assert 'const loadToken = ++currentFileLoadToken;' in js
+        assert 'if (isStaleFileLoadRequest(loadToken, fileId)) {' in js
+        assert "console.error('Error loading file:'" in js
+        assert 'currentFileLoadToken += 1;' in js
 
     def test_versions_script_creates_hidden_recovery_points_before_restore(self, client):
         response = client.get('/lab/static/js/workspace-versions.js')
