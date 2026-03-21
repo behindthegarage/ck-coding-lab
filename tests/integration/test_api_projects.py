@@ -227,6 +227,38 @@ class TestGetProjectAPI:
         
         assert response.status_code == 404  # Should not reveal existence
 
+    def test_get_project_sanitizes_legacy_assistant_markup_in_conversation_history(self, client, auth_headers, project_factory, db_path):
+        """Legacy tool-call sludge should not leak back into workspace chat history."""
+        import sqlite3
+
+        project = project_factory(name='Legacy Transcript Project')
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+                INSERT INTO conversations (project_id, role, content)
+                VALUES (?, 'assistant', ?)
+            ''',
+            (
+                project['id'],
+                "I'll work through it. <|tool_calls_section_begin|> <|tool_call_begin|> functions.write_file:1 <|tool_call_argument_begin|> {\"filename\": \"index.html\"} <|tool_call_end|> <|tool_calls_section_end|>\n\n## Questions for you\n- Want sound next?",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get(f'/api/projects/{project["id"]}', headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assistant_messages = [msg for msg in data['conversations'] if msg['role'] == 'assistant']
+        assert assistant_messages
+        content = assistant_messages[-1]['content']
+        assert '<|tool_calls_section_begin|>' not in content
+        assert 'functions.write_file:1' not in content
+        assert '## Questions for you' in content
+
     def test_get_project_uses_authoritative_project_files_for_current_code(self, client, auth_headers, project_factory, db_path):
         """Project loads should heal stale current_code from project_files."""
         import sqlite3

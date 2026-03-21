@@ -34,11 +34,18 @@ INTERNAL_MARKER_BLOCK_PATTERNS = [
     re.compile(r'(?ims)^\s*tool_call_begin\b.*?^\s*tool_call_end\b\s*'),
     re.compile(r'(?ims)^\s*tool_result_begin\b.*?^\s*tool_result_end\b\s*'),
 ]
+LEGACY_INLINE_MARKER_BLOCK_PATTERNS = [
+    re.compile(r'(?ims)<\|tool_calls_section_begin\|>.*?(?:<\|tool_calls_section_end\|>|(?=^##+\s+)|\Z)'),
+    re.compile(r'(?ims)<\|tool_results_section_begin\|>.*?(?:<\|tool_results_section_end\|>|(?=^##+\s+)|\Z)'),
+    re.compile(r'(?ims)<\|tool_call_begin\|>.*?(?:<\|tool_call_end\|>|(?=^##+\s+)|\Z)'),
+    re.compile(r'(?ims)<\|tool_result_begin\|>.*?(?:<\|tool_result_end\|>|(?=^##+\s+)|\Z)'),
+]
 INTERNAL_MARKER_LINE_PATTERN = re.compile(
     r'(?im)^\s*(?:tool_(?:calls?_section|call|results?_section|result)_(?:begin|end)|tool_use|tool_result)\b.*$'
 )
+LEGACY_INLINE_MARKER_TOKEN_PATTERN = re.compile(r'(?i)<\|/?tool_[^|>]+\|>')
 LEGACY_TOOL_LOG_LINE_PATTERN = re.compile(
-    r'(?im)^\s*(?:[-*]\s*)?(?:`)?(?:read_file|write_file|append_file|list_files)(?:`)?\s*[:(].*$'
+    r'(?im)^\s*(?:[-*]\s*)?(?:`)?(?:(?:functions\.)?(?:read_file|write_file|append_file|list_files))(?:`)?(?:[:#]\d+)?\s*[:(].*$'
 )
 GENERIC_CONTEXT_SKIP_LINES = {
     'idea',
@@ -76,10 +83,11 @@ def sanitize_response_text(text: str) -> str:
 
     cleaned = text.replace('\r\n', '\n')
 
-    for pattern in INTERNAL_MARKER_BLOCK_PATTERNS:
+    for pattern in INTERNAL_MARKER_BLOCK_PATTERNS + LEGACY_INLINE_MARKER_BLOCK_PATTERNS:
         cleaned = pattern.sub('\n', cleaned)
 
     cleaned = INTERNAL_MARKER_LINE_PATTERN.sub('', cleaned)
+    cleaned = LEGACY_INLINE_MARKER_TOKEN_PATTERN.sub('', cleaned)
     cleaned = LEGACY_TOOL_LOG_LINE_PATTERN.sub('', cleaned)
 
     if TOOL_SUMMARY_MARKER in cleaned:

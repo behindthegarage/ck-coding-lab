@@ -2420,7 +2420,11 @@ function sanitizeAssistantContent(content) {
         /^\s*tool_calls_section_begin\b[\s\S]*?^\s*tool_calls_section_end\b\s*/gmi,
         /^\s*tool_results_section_begin\b[\s\S]*?^\s*tool_results_section_end\b\s*/gmi,
         /^\s*tool_call_begin\b[\s\S]*?^\s*tool_call_end\b\s*/gmi,
-        /^\s*tool_result_begin\b[\s\S]*?^\s*tool_result_end\b\s*/gmi
+        /^\s*tool_result_begin\b[\s\S]*?^\s*tool_result_end\b\s*/gmi,
+        /<\|tool_calls_section_begin\|>[\s\S]*?(?:<\|tool_calls_section_end\|>|(?=^##\s+)|$)/gim,
+        /<\|tool_results_section_begin\|>[\s\S]*?(?:<\|tool_results_section_end\|>|(?=^##\s+)|$)/gim,
+        /<\|tool_call_begin\|>[\s\S]*?(?:<\|tool_call_end\|>|(?=^##\s+)|$)/gim,
+        /<\|tool_result_begin\|>[\s\S]*?(?:<\|tool_result_end\|>|(?=^##\s+)|$)/gim
     ];
 
     blockPatterns.forEach((pattern) => {
@@ -2428,6 +2432,8 @@ function sanitizeAssistantContent(content) {
     });
 
     cleaned = cleaned.replace(/^\s*(?:tool_(?:calls?_section|call|results?_section|result)_(?:begin|end)|tool_use|tool_result)\b.*$/gmi, '');
+    cleaned = cleaned.replace(/<\|\/?tool_[^|>]+\|>/gim, '');
+    cleaned = cleaned.replace(/^\s*(?:[-*]\s*)?(?:`)?(?:(?:functions\.)?(?:read_file|write_file|append_file|list_files))(?:`)?(?:[:#]\d+)?\s*[:(].*$/gmi, '');
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
     return cleaned.trim();
 }

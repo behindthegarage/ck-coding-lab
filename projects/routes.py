@@ -9,6 +9,7 @@ from flask import request, jsonify, g
 
 from database import get_db, row_to_dict
 from auth import require_auth
+from ai.parser import sanitize_response_text
 from projects import project_bp
 from projects.access import can_access_project_owner, is_admin_user
 from projects.state import (
@@ -397,7 +398,12 @@ def get_project(project_id):
             ''',
             (project_id,),
         )
-        conversations = [row_to_dict(row) for row in db.fetchall()]
+        conversations = []
+        for row in db.fetchall():
+            item = row_to_dict(row)
+            if item.get('role') == 'assistant':
+                item['content'] = sanitize_response_text(item.get('content') or '')
+            conversations.append(item)
 
         db.execute(
             '''

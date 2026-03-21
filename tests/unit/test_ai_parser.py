@@ -352,6 +352,24 @@ tool_result_end
         assert result['explanation'] == 'I updated the starter.'
         assert result['suggestions'] == ['Add a score.']
 
+    def test_sanitize_response_text_removes_inline_legacy_tool_payload_blocks(self):
+        content = '''
+I'll work through all four features. Starting with swinging vines.
+<|tool_calls_section_begin|> <|tool_call_begin|> functions.write_file:1 <|tool_call_argument_begin|>
+{"filename": "index.html", "content": "<html>huge payload</html>"}
+<|tool_call_end|> <|tool_calls_section_end|>
+
+## Doc updates
+- `todo.md` — Reset the working checklist around the new feature tranche.
+'''
+
+        cleaned = sanitize_response_text(content)
+
+        assert '<|tool_calls_section_begin|>' not in cleaned
+        assert 'functions.write_file:1' not in cleaned
+        assert 'huge payload' not in cleaned
+        assert '## Doc updates' in cleaned
+
     def test_compact_assistant_transcript_drops_review_noise_but_keeps_doc_summary(self):
         content = '''
 I synced the plan and built the first pass.

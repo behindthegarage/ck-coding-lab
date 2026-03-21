@@ -46,4 +46,4 @@ class TestChatFileAwarenessSurface:
         html = response.get_data(as_text=True)
 
         assert '/lab/static/css/workspace.css?v=42' in html
-        assert '/lab/static/js/workspace.js?v=54' in html
+        assert '/lab/static/js/workspace.js?v=55' in html

@@ -19,7 +19,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-dismiss"' in html
         assert '/lab/static/css/workspace.css?v=42' in html
         assert '/lab/static/js/auth.js?v=8' in html
-        assert '/lab/static/js/workspace.js?v=54' in html
+        assert '/lab/static/js/workspace.js?v=55' in html
         assert '/lab/static/js/workspace-versions.js?v=4' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
@@ -47,6 +47,17 @@ class TestWorkspaceRecoverySurface:
         assert '} catch (error) {' in js
         assert "error.message || 'Failed to create file. Please try again.'" in js
         assert 'try {' in js and 'await viewFile(data.file.id, data.file.filename);' in js
+
+    def test_workspace_script_sanitizes_legacy_inline_tool_payload_markers(self, client):
+        response = client.get('/lab/static/js/workspace.js')
+
+        assert response.status_code == 200
+        js = response.get_data(as_text=True)
+
+        assert 'function sanitizeAssistantContent(content)' in js
+        assert '<\\|tool_calls_section_begin\\|>' in js
+        assert '<\\|tool_call_begin\\|>' in js
+        assert 'functions\\.' in js
 
     def test_workspace_script_ignores_stale_file_loads_before_updating_modal_state(self, client):
         response = client.get('/lab/static/js/workspace.js')
