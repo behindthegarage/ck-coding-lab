@@ -226,7 +226,7 @@ def list_projects(client, token):
     return data['projects']
 
 
-def list_versions(client, token, project_id):
+def list_versions(client, token, project_id, include_recovery=False):
     """
     List all versions for a project.
     
@@ -235,6 +235,9 @@ def list_versions(client, token, project_id):
         token: Authentication token
         project_id: Project ID
     
+    Args:
+        include_recovery: When True, include hidden recovery checkpoints.
+
     Returns:
         list: List of version dicts
     """
@@ -243,7 +246,10 @@ def list_versions(client, token, project_id):
     
     assert response.status_code == 200, f"List versions failed: {response.get_json()}"
     data = response.get_json()
-    return data['versions']
+    versions = data['versions']
+    if include_recovery:
+        return versions
+    return [version for version in versions if not (version.get('description') or '').startswith('__ckcl_recovery__:')]
 
 
 def delete_project(client, token, project_id):

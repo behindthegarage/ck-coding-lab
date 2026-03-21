@@ -119,7 +119,55 @@ class TestChatAPI:
         conn.close()
         
         assert 'ellipse' in result['current_code']
-    
+
+    def test_chat_creates_hidden_recovery_checkpoint_after_ai_write(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        # AI-driven file changes should get a hidden recovery checkpoint automatically.
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': 'function draw() { ellipse(100, 100, 50, 50); }',
+            'explanation': 'Updated the sketch.',
+            'suggestions': [],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 75,
+            'tool_calls': [],
+            'created_files': []
+        }
+
+        project = project_factory(language='p5js')
+        project_id = project['id']
+
+        response = client.post(
+            f'/api/projects/{project_id}/chat',
+            headers=auth_headers,
+            json={'message': 'Draw a circle'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['response']['recovery_version_id'] is not None
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT description, entry_filename, code
+            FROM code_versions
+            WHERE project_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (project_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row is not None
+        assert row['description'].startswith('__ckcl_recovery__:After AI update')
+        assert row['entry_filename'] == 'sketch.js'
+        assert 'ellipse' in row['code']
+
     def test_chat_ai_error(self, client, auth_headers, project_factory, mock_ai_client):
         """Test handling of AI generation error."""
         mock_ai_client.generate_code.return_value = {

@@ -2124,6 +2124,10 @@ async function sendMessage(message) {
             }, data.response.model || 'kimi', new Date().toISOString());
             container.appendChild(assistantMsg);
             container.scrollTop = container.scrollHeight;
+
+            if (data.response.recovery_version_id && (hasFileChanges || hasToolCalls || data.response.code)) {
+                showWorkspaceToast('Saved a hidden recovery point for these AI changes.', 'success', 2600);
+            }
         } else {
             const errorMsg = document.createElement('div');
             errorMsg.className = 'message assistant';

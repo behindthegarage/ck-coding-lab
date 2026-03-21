@@ -896,6 +896,102 @@ class TestProjectOversightAndRecoveryAPI:
         assert project['latest_user_message_preview'].startswith('Please fix the eruption button')
         assert project['needs_attention'] is False
 
+
+    def test_recent_runnable_project_without_manual_save_is_not_flagged(self, client, auth_headers):
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Fresh Starter', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        project = next(item for item in response.get_json()['projects'] if item['id'] == project_id)
+        assert project['version_count'] == 0
+        assert project['recovery_version_count'] == 0
+        assert project['needs_attention'] is False
+        assert project['attention_reasons'] == []
+
+    def test_stale_unsaved_progress_is_flagged_without_checkpoint(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Unsaved Volcano', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET created_at = '2026-03-18 12:00:00', updated_at = '2026-03-19 15:00:00' WHERE id = ?",
+            (project_id,),
+        )
+        cursor.execute(
+            "UPDATE project_files SET updated_at = '2026-03-19 15:00:00' WHERE project_id = ?",
+            (project_id,),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        project = next(item for item in response.get_json()['projects'] if item['id'] == project_id)
+        assert project['version_count'] == 0
+        assert project['recovery_version_count'] == 0
+        assert project['needs_attention'] is True
+        assert 'Progress has no save or recovery point yet' in project['attention_reasons']
+
+    def test_hidden_recovery_checkpoint_counts_as_protection_without_inflating_save_points(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Recovered Robot', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET created_at = '2026-03-18 12:00:00', updated_at = '2026-03-20 16:00:00' WHERE id = ?",
+            (project_id,),
+        )
+        cursor.execute(
+            "UPDATE project_files SET updated_at = '2026-03-20 15:00:00' WHERE project_id = ? AND filename = 'index.html'",
+            (project_id,),
+        )
+        cursor.execute(
+            '''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                project_id,
+                '<!DOCTYPE html><html><body>Recovered</body></html>',
+                '__ckcl_recovery__:After AI update',
+                '{"index.html": "<!DOCTYPE html><html><body>Recovered</body></html>"}',
+                'index.html',
+                '2026-03-20 16:00:00',
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        project = next(item for item in response.get_json()['projects'] if item['id'] == project_id)
+        assert project['version_count'] == 0
+        assert project['recovery_version_count'] == 1
+        assert project['needs_attention'] is False
+        assert project['attention_reasons'] == []
+
     def test_kid_scope_all_request_still_only_returns_own_projects(
         self,
         client,

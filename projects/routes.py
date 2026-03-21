@@ -4,6 +4,7 @@ Club Kinawa Coding Lab
 """
 
 import re
+from datetime import UTC, datetime, timedelta
 
 from flask import request, jsonify, g
 
@@ -12,10 +13,10 @@ from auth import require_auth
 from ai.parser import sanitize_response_text
 from projects import project_bp
 from projects.access import can_access_project_owner, is_admin_user
+from projects.recovery import RECOVERY_VERSION_PREFIX, create_recovery_version
 from projects.state import (
     build_project_state,
     replace_project_files,
-    serialize_files_snapshot,
     sync_current_code_cache,
 )
 from projects.utils import (
@@ -27,12 +28,12 @@ from sandbox import CodeValidator
 
 
 LATEST_PREVIEW_LIMIT = 140
-RECOVERY_VERSION_PREFIX = '__ckcl_recovery__:'
+ATTENTION_ACTIVITY_GRACE = timedelta(hours=24)
 REVIEW_FILE_PATTERN = re.compile(r"^###\s+`([^`]+)`", re.MULTILINE)
 REVIEW_SUMMARY_PATTERN = re.compile(r"^- Summary:\s*(.+)$", re.MULTILINE)
 
 
-LIST_PROJECTS_SQL = '''
+LIST_PROJECTS_SQL = f'''
     SELECT
         p.id,
         p.user_id,
@@ -72,12 +73,26 @@ LIST_PROJECTS_SQL = '''
             SELECT COUNT(*)
             FROM code_versions cv
             WHERE cv.project_id = p.id
+              AND (cv.description IS NULL OR cv.description NOT LIKE '{RECOVERY_VERSION_PREFIX}%')
         ) AS version_count,
         (
             SELECT MAX(cv.created_at)
             FROM code_versions cv
             WHERE cv.project_id = p.id
+              AND (cv.description IS NULL OR cv.description NOT LIKE '{RECOVERY_VERSION_PREFIX}%')
         ) AS latest_version_at,
+        (
+            SELECT COUNT(*)
+            FROM code_versions cv
+            WHERE cv.project_id = p.id
+              AND cv.description LIKE '{RECOVERY_VERSION_PREFIX}%'
+        ) AS recovery_version_count,
+        (
+            SELECT MAX(cv.created_at)
+            FROM code_versions cv
+            WHERE cv.project_id = p.id
+              AND cv.description LIKE '{RECOVERY_VERSION_PREFIX}%'
+        ) AS latest_recovery_version_at,
         (
             SELECT COUNT(*)
             FROM conversations c
@@ -147,15 +162,46 @@ def _extract_latest_review(assistant_message):
 
 
 
+def _parse_timestamp(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+        try:
+            return datetime.strptime(str(value), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+
+def _latest_timestamp(*values):
+    parsed = [_parse_timestamp(value) for value in values if value]
+    return max(parsed) if parsed else None
+
+
+
+def _is_recent_timestamp(value, grace=ATTENTION_ACTIVITY_GRACE):
+    parsed = _parse_timestamp(value)
+    if not parsed:
+        return False
+    return datetime.now(UTC).replace(tzinfo=None) - parsed <= grace
+
+
+
 def _compute_latest_activity(project):
-    timestamps = [
+    latest = _latest_timestamp(
         project.get('updated_at'),
         project.get('latest_file_update_at'),
         project.get('latest_version_at'),
+        project.get('latest_recovery_version_at'),
         project.get('latest_conversation_at'),
-    ]
-    timestamps = [value for value in timestamps if value]
-    return max(timestamps) if timestamps else project.get('updated_at')
+    )
+    if latest is None:
+        return project.get('updated_at')
+    return latest.strftime('%Y-%m-%d %H:%M:%S')
 
 
 
@@ -165,20 +211,43 @@ def _build_attention_reasons(project):
 
     reasons = []
     version_count = int(project.get('version_count') or 0)
+    recovery_version_count = int(project.get('recovery_version_count') or 0)
     conversation_count = int(project.get('conversation_count') or 0)
     code_file_count = int(project.get('code_file_count') or 0)
-    file_count = int(project.get('file_count') or 0)
     has_current_code = bool((project.get('current_code') or '').strip())
     latest_review = project.get('latest_review') or {}
 
-    if version_count == 0 and (conversation_count > 0 or file_count > 0):
-        reasons.append('No save point yet')
+    created_at = _parse_timestamp(project.get('created_at'))
+    latest_file_update_at = _parse_timestamp(project.get('latest_file_update_at'))
+    latest_checkpoint_at = _latest_timestamp(
+        project.get('latest_version_at'),
+        project.get('latest_recovery_version_at'),
+    )
+    latest_activity_at = project.get('latest_activity_at') or project.get('updated_at')
 
-    if not has_current_code and code_file_count == 0:
+    has_runnable_code = has_current_code or code_file_count > 0
+    has_checkpoint = version_count > 0 or recovery_version_count > 0
+    has_post_create_file_edits = bool(
+        latest_file_update_at
+        and created_at
+        and latest_file_update_at > created_at
+    )
+    has_meaningful_progress = bool(latest_review) or conversation_count > 0 or has_post_create_file_edits
+    latest_changes_unprotected = bool(
+        has_post_create_file_edits
+        and (latest_checkpoint_at is None or latest_file_update_at > latest_checkpoint_at)
+    )
+    recently_active = _is_recent_timestamp(latest_activity_at)
+
+    if has_meaningful_progress and not has_runnable_code:
         reasons.append('No runnable code yet')
 
-    if latest_review and version_count == 0:
-        reasons.append('Recent AI changes not saved')
+    if has_meaningful_progress and latest_changes_unprotected and not recently_active:
+        reasons.append(
+            'Progress has no save or recovery point yet'
+            if not has_checkpoint
+            else 'Latest changes are newer than the last checkpoint'
+        )
 
     return reasons[:3]
 
@@ -223,37 +292,6 @@ def _get_accessible_project(project_id):
         return None
 
     return project
-
-
-
-def _create_recovery_version(db, project_row, reason):
-    language = project_row.get('language') or 'undecided'
-    state = build_project_state(
-        db,
-        project_row['id'],
-        language,
-        fallback_current_code=project_row.get('current_code') or '',
-        synthesize_primary_file=True,
-    )
-
-    if not state['snapshot_files'] and not (state.get('current_code') or '').strip():
-        return None
-
-    db.execute(
-        '''
-            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
-            VALUES (?, ?, ?, ?, ?)
-        ''',
-        (
-            project_row['id'],
-            state.get('current_code') or '',
-            f'{RECOVERY_VERSION_PREFIX}{reason}',
-            serialize_files_snapshot(state.get('snapshot_files') or {}),
-            state.get('primary_file'),
-        ),
-    )
-    return db.lastrowid
-
 
 
 def _copy_project_versions(db, source_project_id, target_project_id):
@@ -606,7 +644,7 @@ def reset_project(project_id):
         if not project or not can_access_project_owner(g.current_user, project['user_id']):
             return jsonify({"success": False, "error": "Project not found"}), 404
 
-        recovery_version_id = _create_recovery_version(db, project, 'Before reset to starter')
+        recovery_version_id = create_recovery_version(db, project, 'Before reset to starter')
 
         db.execute('DELETE FROM project_files WHERE project_id = ?', (project_id,))
 

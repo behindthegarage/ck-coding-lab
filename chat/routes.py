@@ -20,6 +20,7 @@ from ai.workflow import analyze_workflow_context
 from chat import chat_bp
 from chat.rate_limit import check_chat_rate_limit
 from projects.access import can_access_project_owner
+from projects.recovery import create_recovery_version
 from projects.state import is_code_file, persist_generated_code, sync_current_code_cache
 
 WRITE_TOOL_NAMES = {'write_file', 'append_file'}
@@ -512,6 +513,7 @@ def chat_with_ai(project_id):
     )
 
     # Save AI response and keep projects.current_code derived from project_files
+    recovery_version_id = None
     with get_db() as db:
         code_files_touched = any(is_code_file((file_info or {}).get('filename', '')) for file_info in changed_files)
 
@@ -528,6 +530,17 @@ def chat_with_ai(project_id):
             fallback_current_code=current_code,
             touch_project=bool(result['code'] or tool_calls or changed_files)
         )
+
+        if code_files_touched or changed_files or write_tools_used:
+            recovery_version_id = create_recovery_version(
+                db,
+                {
+                    'id': project_id,
+                    'language': language,
+                    'current_code': project_state.get('current_code') or current_code,
+                },
+                'After AI update',
+            )
 
         assistant_content = _build_assistant_message(
             result.get('explanation', ''),
@@ -576,6 +589,7 @@ def chat_with_ai(project_id):
             'changed_files': changed_files,
             'doc_updates': doc_updates,
             'change_review': change_review,
-            'primary_file': project_state.get('primary_file')
+            'primary_file': project_state.get('primary_file'),
+            'recovery_version_id': recovery_version_id
         }
     })

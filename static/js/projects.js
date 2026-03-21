@@ -386,7 +386,7 @@ function renderSummaryCards(filteredProjects) {
         <article class="summary-card">
             <span class="summary-label">Needs attention</span>
             <strong class="summary-value">${needsAttention.length}</strong>
-            <span class="summary-note">Missing save points or runnable code</span>
+            <span class="summary-note">Stale projects without backup checkpoints or runnable code</span>
         </article>
         <article class="summary-card">
             <span class="summary-label">Recently opened</span>
