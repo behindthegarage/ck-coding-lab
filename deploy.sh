@@ -20,6 +20,35 @@ if [ ! -x "$PYTHON_BIN" ] || [ ! -x "$PIP_BIN" ]; then
     exit 1
 fi
 
+# Sync latest code before doing the rest of the deploy
+if git -C "$APP_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    BRANCH="$(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)"
+    if [ -z "$BRANCH" ] || [ "$BRANCH" = "HEAD" ]; then
+        BRANCH="main"
+    fi
+
+    if ! git -C "$APP_DIR" diff --quiet || ! git -C "$APP_DIR" diff --cached --quiet; then
+        echo "❌ Refusing to deploy with uncommitted tracked changes in ${APP_DIR}"
+        echo "   Commit or stash them first so git pull can fast-forward safely."
+        git -C "$APP_DIR" status --short
+        exit 1
+    fi
+
+    echo "🔄 Syncing latest code from origin/${BRANCH}..."
+    git -C "$APP_DIR" fetch origin "$BRANCH"
+    LOCAL_SHA="$(git -C "$APP_DIR" rev-parse HEAD)"
+    REMOTE_SHA="$(git -C "$APP_DIR" rev-parse "origin/${BRANCH}")"
+
+    if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+        git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+        echo "✅ Updated repo to $(git -C "$APP_DIR" rev-parse --short HEAD)"
+    else
+        echo "✅ Repo already up to date at $(git -C "$APP_DIR" rev-parse --short HEAD)"
+    fi
+else
+    echo "⚠️  ${APP_DIR} is not a git checkout; skipping code sync"
+fi
+
 # Copy systemd service
 echo "📋 Installing systemd service..."
 if [ -f "${SERVICE_NAME}.service" ]; then
