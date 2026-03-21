@@ -3,10 +3,26 @@ projects/recovery.py - Shared hidden recovery checkpoint helpers
 Club Kinawa Coding Lab
 """
 
+from typing import Optional
+
 from projects.state import build_project_state, serialize_files_snapshot
 
 
 RECOVERY_VERSION_PREFIX = '__ckcl_recovery__:'
+
+
+def is_recovery_version_description(description: Optional[str]) -> bool:
+    """Return True when a version description marks a hidden recovery checkpoint."""
+    return bool((description or '').startswith(RECOVERY_VERSION_PREFIX))
+
+
+def get_recovery_version_reason(description: Optional[str]) -> Optional[str]:
+    """Strip the hidden prefix from a recovery checkpoint description."""
+    if not is_recovery_version_description(description):
+        return None
+
+    reason = (description or '')[len(RECOVERY_VERSION_PREFIX):].strip()
+    return reason or 'Automatic recovery checkpoint'
 
 
 def create_recovery_version(db, project_row, reason, *, dedupe_against_latest=True):
@@ -31,7 +47,7 @@ def create_recovery_version(db, project_row, reason, *, dedupe_against_latest=Tr
     if dedupe_against_latest:
         db.execute(
             '''
-                SELECT id, code, files_snapshot, entry_filename
+                SELECT id, code, description, files_snapshot, entry_filename
                 FROM code_versions
                 WHERE project_id = ?
                 ORDER BY created_at DESC, id DESC
@@ -40,7 +56,7 @@ def create_recovery_version(db, project_row, reason, *, dedupe_against_latest=Tr
             (project_row['id'],),
         )
         latest_version = db.fetchone()
-        if latest_version:
+        if latest_version and is_recovery_version_description(latest_version['description']):
             latest_code = latest_version['code'] or ''
             latest_snapshot = latest_version['files_snapshot']
             latest_entry = latest_version['entry_filename']

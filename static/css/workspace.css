@@ -1293,6 +1293,39 @@
     padding-right: 0.25rem;
 }
 
+.versions-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.versions-section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 0.1rem;
+}
+
+.versions-section-header h4 {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
+.versions-section-header p {
+    margin: 0.2rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.versions-section-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
 .version-item {
     display: flex;
     align-items: center;
@@ -1332,6 +1365,12 @@
 .version-item-top strong {
     font-size: 0.95rem;
     color: var(--text);
+}
+
+.version-detail {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.45;
 }
 
 .version-state-badges {

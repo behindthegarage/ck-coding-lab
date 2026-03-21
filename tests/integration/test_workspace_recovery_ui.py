@@ -17,10 +17,12 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-actions"' in html
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
-        assert '/lab/static/css/workspace.css?v=42' in html
+        assert 'Restore a named save point or an automatic checkpoint if you need to roll the project back.' in html
+        assert '/lab/static/css/workspace.css?v=43' in html
         assert '/lab/static/js/auth.js?v=8' in html
         assert '/lab/static/js/workspace.js?v=55' in html
-        assert '/lab/static/js/workspace-versions.js?v=4' in html
+        assert '/lab/static/js/workspace-versions.js?v=5' in html
+        assert 'Version History' in html
 
     def test_workspace_script_supports_deleted_file_undo_toasts(self, client):
         response = client.get('/lab/static/js/workspace.js')
@@ -210,8 +212,15 @@ class TestWorkspaceRecoverySurface:
 
         assert "const RECOVERY_VERSION_PREFIX = '__ckcl_recovery__:';" in js
         assert 'function getVisibleWorkspaceVersions()' in js
+        assert 'function getRecoveryWorkspaceVersions()' in js
+        assert "return versionOrDescription.checkpoint_kind === 'recovery';" in js
+        assert 'function getVersionDetail(version)' in js
+        assert 'version-detail' in js
         assert 'async function createRecoveryVersion(reason = \'Before risky workspace action\')' in js
         assert 'async function undoWorkspaceRecovery(versionId, label = \'your previous project state\')' in js
+        assert 'Safety nets the system created before risky changes or after AI updates.' in js
+        assert 'const data = await apiRequest(`/projects/${projectId}/versions`);' in js
+        assert 'Added an automatic checkpoint so this older project has a safe place to come back to.' in js
         assert 'suppressAssistantChangeBadgesForNextConversationRender();' in js
         assert "Couldn't create a safety net, so the restore was canceled." in js
 

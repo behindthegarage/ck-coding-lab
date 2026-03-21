@@ -5,10 +5,40 @@ window.__ckclVersions = window.__ckclVersions || [];
 const RECOVERY_VERSION_PREFIX = '__ckcl_recovery__:';
 
 function isRecoveryVersion(versionOrDescription) {
+    if (typeof versionOrDescription === 'object' && versionOrDescription) {
+        if (versionOrDescription.checkpoint_kind) {
+            return versionOrDescription.checkpoint_kind === 'recovery';
+        }
+        if (versionOrDescription?.is_recovery === true) {
+            return true;
+        }
+    }
+
     const description = typeof versionOrDescription === 'string'
         ? versionOrDescription
         : versionOrDescription?.description;
     return (description || '').startsWith(RECOVERY_VERSION_PREFIX);
+}
+
+function getRecoveryVersionReason(versionOrDescription) {
+    if (typeof versionOrDescription === 'object' && versionOrDescription) {
+        if (versionOrDescription.checkpoint_detail) {
+            return versionOrDescription.checkpoint_detail;
+        }
+        if (versionOrDescription.recovery_reason) {
+            return versionOrDescription.recovery_reason;
+        }
+    }
+
+    const description = typeof versionOrDescription === 'string'
+        ? versionOrDescription
+        : versionOrDescription?.description;
+
+    if (!isRecoveryVersion(description)) {
+        return '';
+    }
+
+    return (description || '').slice(RECOVERY_VERSION_PREFIX.length).trim() || 'Saved automatically to protect your work.';
 }
 
 function getWorkspaceVersions() {
@@ -16,7 +46,15 @@ function getWorkspaceVersions() {
 }
 
 function getVisibleWorkspaceVersions() {
+    return getWorkspaceVersions();
+}
+
+function getManualWorkspaceVersions() {
     return getWorkspaceVersions().filter(version => !isRecoveryVersion(version));
+}
+
+function getRecoveryWorkspaceVersions() {
+    return getWorkspaceVersions().filter(version => isRecoveryVersion(version));
 }
 
 function setWorkspaceVersions(nextVersions) {
@@ -25,7 +63,15 @@ function setWorkspaceVersions(nextVersions) {
 }
 
 function getCurrentSavedVersion() {
-    return getVisibleWorkspaceVersions().find(version => version.matches_live_state) || null;
+    return getManualWorkspaceVersions().find(version => version.matches_live_state) || null;
+}
+
+function getCurrentRecoveryVersion() {
+    return getRecoveryWorkspaceVersions().find(version => version.matches_live_state) || null;
+}
+
+function getCurrentVersionMatch() {
+    return getWorkspaceVersions().find(version => version.matches_live_state) || null;
 }
 
 function hasAnyRunnableProjectState() {
@@ -121,8 +167,52 @@ function formatFileCount(version) {
 }
 
 function getVersionDescription(version) {
+    const displayDescription = (version?.display_description || '').trim();
+    if (displayDescription) {
+        return displayDescription;
+    }
+
+    if (isRecoveryVersion(version)) {
+        return 'Automatic checkpoint';
+    }
+
     const description = (version.description || '').trim();
     return description || 'Manual save';
+}
+
+function getVersionDetail(version) {
+    if (!isRecoveryVersion(version)) {
+        return '';
+    }
+
+    return getRecoveryVersionReason(version);
+}
+
+function getVersionTypeLabel(version) {
+    return isRecoveryVersion(version) ? 'Automatic checkpoint' : 'Manual save';
+}
+
+function bindVersionsSummaryFocusButton() {
+    const focusBtn = document.getElementById('versions-summary-focus-file');
+    if (!focusBtn) return;
+
+    focusBtn.addEventListener('click', () => {
+        closeVersionsModal();
+        const editor = document.getElementById('modal-file-editor');
+        if (editor) editor.focus();
+    });
+}
+
+function bindVersionsSummarySaveButton(options = {}) {
+    const saveBtn = document.getElementById('versions-summary-save-current');
+    if (!saveBtn) return;
+
+    saveBtn.addEventListener('click', async () => {
+        await saveProjectVersion({
+            initialValue: options.initialValue || 'Before restoring older work',
+            message: options.message || 'Save the current project state first so you can safely jump back after restoring an older version.'
+        });
+    });
 }
 
 function renderVersionsSummary() {
@@ -131,6 +221,9 @@ function renderVersionsSummary() {
 
     const dirtyFile = getDirtyVersioningFile();
     const currentSavedVersion = getCurrentSavedVersion();
+    const currentRecoveryVersion = getCurrentRecoveryVersion();
+    const manualVersions = getManualWorkspaceVersions();
+    const recoveryVersions = getRecoveryWorkspaceVersions();
     const hasProjectState = hasAnyRunnableProjectState();
 
     if (dirtyFile) {
@@ -142,15 +235,7 @@ function renderVersionsSummary() {
             </div>
             <button id="versions-summary-focus-file" class="btn-small" type="button">Back to file</button>
         `;
-
-        const focusBtn = document.getElementById('versions-summary-focus-file');
-        if (focusBtn) {
-            focusBtn.addEventListener('click', () => {
-                closeVersionsModal();
-                const editor = document.getElementById('modal-file-editor');
-                if (editor) editor.focus();
-            });
-        }
+        bindVersionsSummaryFocusButton();
         return;
     }
 
@@ -165,6 +250,38 @@ function renderVersionsSummary() {
         return;
     }
 
+    if (currentRecoveryVersion) {
+        container.className = 'versions-summary info';
+        container.innerHTML = `
+            <div class="versions-summary-copy">
+                <strong>Current project matches an automatic recovery checkpoint.</strong>
+                <span>You're protected by <strong>${escapeHtml(getVersionDescription(currentRecoveryVersion))}</strong> from ${escapeHtml(formatVersionTimestamp(currentRecoveryVersion.created_at))}. Save a manual version too if this is a milestone you want to keep on purpose.</span>
+            </div>
+            <button id="versions-summary-save-current" class="btn-small" type="button">Save current state</button>
+        `;
+        bindVersionsSummarySaveButton({
+            initialValue: 'Named save after recovery checkpoint',
+            message: 'Automatic recovery checkpoints help in a pinch, but a named save point is better when you want to keep this moment on purpose.'
+        });
+        return;
+    }
+
+    if (manualVersions.length === 0 && recoveryVersions.length > 0) {
+        container.className = 'versions-summary info';
+        container.innerHTML = `
+            <div class="versions-summary-copy">
+                <strong>No manual save points yet.</strong>
+                <span>Automatic recovery checkpoints are available below, so you still have a safety net. Save a named version when you want a milestone that's easier to recognize later.</span>
+            </div>
+            <button id="versions-summary-save-current" class="btn-small" type="button">Save current state</button>
+        `;
+        bindVersionsSummarySaveButton({
+            initialValue: 'Named save after recovery checkpoint',
+            message: 'You already have automatic recovery checkpoints below. Create a manual save too if you want an easy-to-find milestone with your own label.'
+        });
+        return;
+    }
+
     if (hasProjectState) {
         container.className = 'versions-summary warning';
         container.innerHTML = `
@@ -175,15 +292,7 @@ function renderVersionsSummary() {
             <button id="versions-summary-save-current" class="btn-small" type="button">Save current state</button>
         `;
 
-        const saveBtn = document.getElementById('versions-summary-save-current');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', async () => {
-                await saveProjectVersion({
-                    initialValue: 'Before restoring older work',
-                    message: 'Save the current project state first so you can safely jump back after restoring an older version.'
-                });
-            });
-        }
+        bindVersionsSummarySaveButton();
         return;
     }
 
@@ -196,59 +305,106 @@ function renderVersionsSummary() {
     `;
 }
 
+function renderVersionItem(version, { latestLabel = '' } = {}) {
+    const hasSnapshot = Number(version.has_files_snapshot) === 1;
+    const isCurrent = Boolean(version.matches_live_state);
+    const description = getVersionDescription(version);
+    const detail = getVersionDetail(version);
+    const badges = [
+        getVersionTypeLabel(version),
+        hasSnapshot ? 'Multi-file snapshot' : 'Single-file save',
+        formatFileCount(version),
+        formatVersionSize(version.code_size),
+    ];
+
+    if (version.entry_filename) {
+        badges.push(version.entry_filename);
+    }
+
+    const statusBadges = [
+        isCurrent ? '<span class="version-chip current">Current project</span>' : '',
+        latestLabel ? `<span class="version-chip neutral">${escapeHtml(latestLabel)}</span>` : '',
+    ].filter(Boolean).join('');
+
+    return `
+        <div class="version-item${isCurrent ? ' is-current' : ''}">
+            <div class="version-item-main">
+                <div class="version-item-top">
+                    <div class="version-title-wrap">
+                        <strong>${escapeHtml(description)}</strong>
+                        ${detail ? `<div class="version-detail">${escapeHtml(detail)}</div>` : ''}
+                        <div class="version-state-badges">${statusBadges}</div>
+                    </div>
+                    <div class="version-date-wrap">
+                        <span class="version-date-relative">${escapeHtml(formatRelativeVersionTime(version.created_at))}</span>
+                        <span class="version-date">${escapeHtml(formatVersionTimestamp(version.created_at))}</span>
+                    </div>
+                </div>
+                <div class="version-meta">
+                    ${badges.map(badge => `<span class="version-chip">${escapeHtml(badge)}</span>`).join('')}
+                </div>
+            </div>
+            <button class="btn-small restore-version-btn" data-version-id="${version.id}">${isCurrent ? 'Restore again' : 'Restore'}</button>
+        </div>
+    `;
+}
+
+function renderVersionsSection(title, subtitle, versions, { latestLabel = '', emptyMessage = '' } = {}) {
+    return `
+        <div class="versions-section">
+            <div class="versions-section-header">
+                <div>
+                    <h4>${escapeHtml(title)}</h4>
+                    <p>${escapeHtml(subtitle)}</p>
+                </div>
+                <span class="version-chip">${versions.length}</span>
+            </div>
+            <div class="versions-section-list">
+                ${versions.length > 0
+                    ? versions.map((version, index) => renderVersionItem(version, {
+                        latestLabel: index === 0 ? latestLabel : ''
+                    })).join('')
+                    : `<div class="file-loading">${escapeHtml(emptyMessage)}</div>`}
+            </div>
+        </div>
+    `;
+}
+
 function renderVersionsList() {
     const container = document.getElementById('versions-list');
     if (!container) return;
 
     renderVersionsSummary();
 
-    const versions = getVisibleWorkspaceVersions();
+    const versions = getWorkspaceVersions();
     if (versions.length === 0) {
-        container.innerHTML = '<div class="file-loading">No saved versions yet.</div>';
+        container.innerHTML = '<div class="file-loading">No saved versions or recovery checkpoints yet.</div>';
         return;
     }
 
-    container.innerHTML = versions.map((version, index) => {
-        const hasSnapshot = Number(version.has_files_snapshot) === 1;
-        const isCurrent = Boolean(version.matches_live_state);
-        const isLatest = index === 0;
-        const description = getVersionDescription(version);
-        const badges = [
-            hasSnapshot ? 'Multi-file snapshot' : 'Single-file save',
-            formatFileCount(version),
-            formatVersionSize(version.code_size),
-        ];
+    const manualVersions = getManualWorkspaceVersions();
+    const recoveryVersions = getRecoveryWorkspaceVersions();
 
-        if (version.entry_filename) {
-            badges.push(version.entry_filename);
-        }
-
-        const statusBadges = [
-            isCurrent ? '<span class="version-chip current">Current project</span>' : '',
-            isLatest ? '<span class="version-chip neutral">Latest save</span>' : '',
-        ].filter(Boolean).join('');
-
-        return `
-            <div class="version-item${isCurrent ? ' is-current' : ''}">
-                <div class="version-item-main">
-                    <div class="version-item-top">
-                        <div class="version-title-wrap">
-                            <strong>${escapeHtml(description)}</strong>
-                            <div class="version-state-badges">${statusBadges}</div>
-                        </div>
-                        <div class="version-date-wrap">
-                            <span class="version-date-relative">${escapeHtml(formatRelativeVersionTime(version.created_at))}</span>
-                            <span class="version-date">${escapeHtml(formatVersionTimestamp(version.created_at))}</span>
-                        </div>
-                    </div>
-                    <div class="version-meta">
-                        ${badges.map(badge => `<span class="version-chip">${escapeHtml(badge)}</span>`).join('')}
-                    </div>
-                </div>
-                <button class="btn-small restore-version-btn" data-version-id="${version.id}">${isCurrent ? 'Restore again' : 'Restore'}</button>
-            </div>
-        `;
-    }).join('');
+    container.innerHTML = [
+        renderVersionsSection(
+            'Save points',
+            'Named milestones you created on purpose.',
+            manualVersions,
+            {
+                latestLabel: 'Latest save',
+                emptyMessage: 'No manual save points yet.'
+            }
+        ),
+        renderVersionsSection(
+            'Recovery checkpoints',
+            'Safety nets the system created before risky changes or after AI updates.',
+            recoveryVersions,
+            {
+                latestLabel: 'Latest recovery',
+                emptyMessage: 'No recovery checkpoints yet.'
+            }
+        )
+    ].join('');
 
     container.querySelectorAll('.restore-version-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -322,6 +478,10 @@ async function loadVersions() {
 
     setWorkspaceVersions(data.versions || []);
     renderVersionsList();
+
+    if (data.created_baseline_recovery) {
+        setVersionsStatus('Added an automatic checkpoint so this older project has a safe place to come back to.', 'info');
+    }
 }
 
 async function restoreVersion(version, buttonEl) {
@@ -337,20 +497,23 @@ async function restoreVersion(version, buttonEl) {
     }
 
     const description = getVersionDescription(version);
+    const versionLabel = isRecoveryVersion(version) ? 'recovery checkpoint' : 'saved version';
     const currentSavedVersion = getCurrentSavedVersion();
-    const needsSaveCue = !currentSavedVersion && !version.matches_live_state && hasAnyRunnableProjectState();
+    const currentVersionMatch = getCurrentVersionMatch();
+    const needsSaveCue = !currentSavedVersion && currentVersionMatch !== version && !version.matches_live_state && hasAnyRunnableProjectState();
     const detailParts = [
+        getVersionTypeLabel(version),
         formatFileCount(version),
         version.entry_filename || 'Unknown entry file',
         Number(version.has_files_snapshot) === 1 ? 'multi-file snapshot' : 'single-file save'
     ];
     const warning = needsSaveCue
-        ? 'Tip: your current project is not saved in version history yet. Save it first if you might want to come back.'
+        ? 'Tip: your current project is not saved as a named save point yet. Save it first if you might want to come back.'
         : '';
 
     const action = await showFileActionDialog({
-        title: 'Restore saved version',
-        message: `Restore "${description}" from ${formatVersionTimestamp(version.created_at)}? This will replace the project's current files with that saved version. (${detailParts.join(' • ')})${warning ? ` ${warning}` : ''}`,
+        title: isRecoveryVersion(version) ? 'Restore recovery checkpoint' : 'Restore saved version',
+        message: `Restore "${description}" from ${formatVersionTimestamp(version.created_at)}? This will replace the project's current files with that ${versionLabel}. (${detailParts.join(' • ')})${warning ? ` ${warning}` : ''}`,
         confirmLabel: needsSaveCue ? 'Restore without saving' : 'Restore version',
         confirmClass: 'btn-primary',
         needsInput: false

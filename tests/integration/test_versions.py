@@ -290,11 +290,23 @@ class TestListVersionsAPI:
         assert version_by_description['Version 1']['file_count'] == 1
         assert version_by_description['Version 1']['code_size'] == len('code1')
         assert version_by_description['Version 1']['matches_live_state'] is False
+        assert version_by_description['Version 1']['is_recovery'] is False
+        assert version_by_description['Version 1']['version_type'] == 'manual'
+        assert version_by_description['Version 1']['recovery_reason'] is None
+        assert version_by_description['Version 1']['checkpoint_kind'] == 'manual'
+        assert version_by_description['Version 1']['checkpoint_label'] == 'Save point'
+        assert version_by_description['Version 1']['display_description'] == 'Version 1'
         assert version_by_description['Version 2']['has_files_snapshot'] == 0
         assert version_by_description['Version 2']['entry_filename'] == 'sketch.js'
         assert version_by_description['Version 2']['file_count'] == 1
         assert version_by_description['Version 2']['code_size'] == len('code2')
         assert version_by_description['Version 2']['matches_live_state'] is False
+        assert version_by_description['Version 2']['is_recovery'] is False
+        assert version_by_description['Version 2']['version_type'] == 'manual'
+        assert version_by_description['Version 2']['recovery_reason'] is None
+        assert version_by_description['Version 2']['checkpoint_kind'] == 'manual'
+        assert version_by_description['Version 2']['checkpoint_label'] == 'Save point'
+        assert version_by_description['Version 2']['display_description'] == 'Version 2'
 
     def test_list_versions_marks_live_project_checkpoint(self, client, auth_headers, project_factory, db_path):
         """Listing versions should identify which save matches the current project state."""
@@ -354,6 +366,103 @@ class TestListVersionsAPI:
         assert version_by_description['Current checkpoint']['entry_filename'] == 'index.html'
         assert version_by_description['Old checkpoint']['matches_live_state'] is False
         assert version_by_description['Old checkpoint']['file_count'] == 2
+
+
+
+    def test_list_versions_includes_recovery_metadata(self, client, auth_headers, project_factory, db_path):
+        """Recovery checkpoints should be labeled distinctly from manual saves."""
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''',
+            (
+                project_id,
+                '<html><body>Recovered</body></html>',
+                '__ckcl_recovery__:After AI update',
+                json.dumps({'index.html': '<html><body>Recovered</body></html>'}),
+                'index.html',
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get(
+            f'/api/projects/{project_id}/versions',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        version = response.get_json()['versions'][0]
+        assert version['is_recovery'] is True
+        assert version['version_type'] == 'recovery'
+        assert version['recovery_reason'] == 'After AI update'
+        assert version['checkpoint_kind'] == 'recovery'
+        assert version['checkpoint_label'] == 'Automatic checkpoint'
+        assert version['description'] == '__ckcl_recovery__:After AI update'
+
+    def test_list_versions_can_seed_baseline_recovery_when_history_is_opened(self, client, auth_headers, db_path):
+        """Opening history can lazily backfill a baseline recovery checkpoint for older work."""
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Pitfall', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET created_at = '2026-03-18 12:00:00', updated_at = '2026-03-20 15:00:00' WHERE id = ?",
+            (project_id,),
+        )
+        cursor.execute(
+            "UPDATE project_files SET updated_at = '2026-03-20 15:00:00' WHERE project_id = ? AND filename = 'index.html'",
+            (project_id,),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get(
+            f'/api/projects/{project_id}/versions',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['created_baseline_recovery'] is True
+        assert data['baseline_recovery_version_id'] is not None
+        assert len(data['versions']) == 1
+        assert data['versions'][0]['is_recovery'] is True
+        assert data['versions'][0]['version_type'] == 'recovery'
+        assert data['versions'][0]['recovery_reason'] == 'Current project when version history was first opened'
+        assert data['versions'][0]['checkpoint_origin'] == 'baseline'
+        assert data['versions'][0]['matches_live_state'] is True
+
+    def test_list_versions_does_not_seed_recovery_for_fresh_starter_project(self, client, auth_headers):
+        """Fresh starter projects should not get a synthetic checkpoint just from opening history."""
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Fresh Starter', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        response = client.get(
+            f'/api/projects/{project_id}/versions',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['created_baseline_recovery'] is False
+        assert data['baseline_recovery_version_id'] is None
+        assert data['versions'] == []
 
     def test_list_versions_wrong_project(self, client, auth_headers):
         """Test listing versions for non-existent project."""
@@ -430,6 +539,44 @@ class TestGetVersionAPI:
         assert data['version']['description'] == 'Saved version'
         assert data['version']['files'] == {'sketch.js': 'saved code here'}
         assert data['version']['entry_filename'] == 'sketch.js'
+        assert data['version']['checkpoint_kind'] == 'manual'
+        assert data['version']['checkpoint_label'] == 'Save point'
+
+    def test_get_version_exposes_recovery_checkpoint_metadata(self, client, auth_headers, project_factory, db_path):
+        """Version retrieval should expose recovery metadata without making the UI parse prefixes."""
+        project = project_factory(language='html')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+            ''',
+            (
+                project_id,
+                '<html><body>Recovered</body></html>',
+                '__ckcl_recovery__:After AI update',
+                json.dumps({'index.html': '<html><body>Recovered</body></html>'}),
+                'index.html',
+            ),
+        )
+        version_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        response = client.get(
+            f'/api/projects/{project_id}/versions/{version_id}',
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        version = response.get_json()['version']
+        assert version['checkpoint_kind'] == 'recovery'
+        assert version['checkpoint_label'] == 'Automatic checkpoint'
+        assert version['checkpoint_detail'] == 'After AI update'
+        assert version['display_description'] == 'Automatic checkpoint'
 
     def test_get_version_returns_stored_file_snapshot(self, client, auth_headers, project_factory, db_path):
         """Version retrieval should include the saved multi-file snapshot."""
