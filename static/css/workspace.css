@@ -580,7 +580,6 @@
     }
 
     .project-sidebar {
-    position: relative;
         position: fixed;
         left: 0;
         top: 65px;
@@ -631,13 +630,11 @@
     }
 
     .project-sidebar {
-    position: relative;
         top: 65px;
         bottom: 100px; /* Account for quick actions */
     }
 
     .preview-pane {
-    position: relative;
         position: fixed;
         top: 65px;
         left: 0;
