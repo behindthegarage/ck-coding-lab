@@ -36,6 +36,16 @@ let suppressAssistantChangeBadgesOnce = false;
 let isMobile = window.innerWidth < 768;
 let isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
 
+// Panel widths (persisted)
+let sidebarWidth = parseInt(localStorage.getItem('sidebarWidth')) || 200;
+let previewWidth = parseInt(localStorage.getItem('previewWidth')) || 400;
+const MIN_SIDEBAR_WIDTH = 180;
+const MAX_SIDEBAR_WIDTH = 400;
+const MIN_PREVIEW_WIDTH = 300;
+const MAX_PREVIEW_WIDTH = 600;
+let isResizingSidebar = false;
+let isResizingPreview = false;
+
 const PRIMARY_SHORTCUT_LABEL = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '') ? '⌘' : 'Ctrl';
 
 function isTextInputTarget(target) {
@@ -1645,6 +1655,81 @@ function toggleSidebar() {
     localStorage.setItem('sidebarCollapsed', sidebarCollapsed);
 }
 
+// Initialize drag handles for resizable panels
+function initializeResizablePanels() {
+    const sidebar = document.getElementById('project-sidebar');
+    const preview = document.getElementById('preview-pane');
+    
+    if (!isMobile && !isTablet) {
+        applyPanelWidths();
+    }
+    
+    const sidebarHandle = document.createElement('div');
+    sidebarHandle.className = 'resize-handle resize-handle-sidebar';
+    sidebarHandle.title = 'Drag to resize';
+    sidebarHandle.addEventListener('mousedown', (e) => startSidebarResize(e));
+    sidebar.appendChild(sidebarHandle);
+    
+    const previewHandle = document.createElement('div');
+    previewHandle.className = 'resize-handle resize-handle-preview';
+    previewHandle.title = 'Drag to resize';
+    previewHandle.addEventListener('mousedown', (e) => startPreviewResize(e));
+    preview.appendChild(previewHandle);
+    
+    document.addEventListener('mousemove', handleResizeDrag);
+    document.addEventListener('mouseup', stopResizeDrag);
+}
+
+function applyPanelWidths() {
+    const workspace = document.getElementById('workspace-container');
+    if (workspace && !isMobile && !isTablet) {
+        workspace.style.gridTemplateColumns = `${sidebarWidth}px 1fr ${previewWidth}px`;
+    }
+}
+
+function startSidebarResize(e) {
+    if (isMobile || isTablet || sidebarCollapsed) return;
+    isResizingSidebar = true;
+    document.body.classList.add('resizing');
+    e.preventDefault();
+}
+
+function startPreviewResize(e) {
+    if (isMobile || isTablet || previewCollapsed) return;
+    isResizingPreview = true;
+    document.body.classList.add('resizing');
+    e.preventDefault();
+}
+
+function handleResizeDrag(e) {
+    if (!isResizingSidebar && !isResizingPreview) return;
+    
+    const workspace = document.getElementById('workspace-container');
+    const rect = workspace.getBoundingClientRect();
+    
+    if (isResizingSidebar) {
+        const newWidth = e.clientX - rect.left;
+        sidebarWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, newWidth));
+        applyPanelWidths();
+    }
+    
+    if (isResizingPreview) {
+        const newWidth = rect.right - e.clientX;
+        previewWidth = Math.max(MIN_PREVIEW_WIDTH, Math.min(MAX_PREVIEW_WIDTH, newWidth));
+        applyPanelWidths();
+    }
+}
+
+function stopResizeDrag() {
+    if (isResizingSidebar || isResizingPreview) {
+        isResizingSidebar = false;
+        isResizingPreview = false;
+        document.body.classList.remove('resizing');
+        localStorage.setItem('sidebarWidth', sidebarWidth);
+        localStorage.setItem('previewWidth', previewWidth);
+    }
+}
+
 // Handle window resize for responsive layout
 function handleResize() {
     const newIsMobile = window.innerWidth < 768;
@@ -1680,6 +1765,7 @@ function handleResize() {
             sidebar.classList.toggle('collapsed', sidebarCollapsed);
             preview.classList.toggle('collapsed', previewCollapsed);
             showPreviewBtn.classList.add('hidden');
+            applyPanelWidths();
         }
     }
     
@@ -2438,6 +2524,8 @@ function sanitizeAssistantContent(content) {
     cleaned = cleaned.replace(/^\s*(?:tool_(?:calls?_section|call|results?_section|result)_(?:begin|end)|tool_use|tool_result)\b.*$/gmi, '');
     cleaned = cleaned.replace(/<\|\/?tool_[^|>]+\|>/gim, '');
     cleaned = cleaned.replace(/^\s*(?:[-*]\s*)?(?:`)?(?:(?:functions\.)?(?:read_file|write_file|append_file|list_files))(?:`)?(?:[:#]\d+)?\s*[:(].*$/gmi, '');
+    cleaned = cleaned.replace(/^##\s+Tools Used\s*$[\s\S]*?(?=^##\s+|$)/gmi, '');
+    cleaned = cleaned.replace(/^\*\*Tool Calls:\*\*\s*$[\s\S]*?(?=^##\s+|$)/gmi, '');
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
     return cleaned.trim();
 }
@@ -2637,6 +2725,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize responsive state
     handleResize();
+    initializeResizablePanels();
     
     // Listen for window resize
     window.addEventListener('resize', handleResize);

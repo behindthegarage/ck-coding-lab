@@ -24,6 +24,7 @@
    ============================================ */
 
 .project-sidebar {
+    position: relative;
     grid-area: sidebar;
     width: 200px;
     min-width: 200px;
@@ -199,6 +200,7 @@
    ============================================ */
 
 .preview-pane {
+    position: relative;
     grid-area: preview;
     display: flex;
     flex-direction: column;
@@ -578,6 +580,7 @@
     }
 
     .project-sidebar {
+    position: relative;
         position: fixed;
         left: 0;
         top: 65px;
@@ -628,11 +631,13 @@
     }
 
     .project-sidebar {
+    position: relative;
         top: 65px;
         bottom: 100px; /* Account for quick actions */
     }
 
     .preview-pane {
+    position: relative;
         position: fixed;
         top: 65px;
         left: 0;
@@ -2172,5 +2177,51 @@
 
     .shortcut-key {
         white-space: normal;
+    }
+}
+
+
+/* ============================================
+   RESIZE HANDLES
+   ============================================ */
+
+.resize-handle {
+    position: absolute;
+    top: 0;
+    width: 4px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.2s;
+    z-index: 100;
+}
+
+.resize-handle:hover,
+.resize-handle:active,
+body.resizing .resize-handle {
+    background: var(--accent);
+}
+
+.resize-handle-sidebar {
+    right: 0;
+}
+
+.resize-handle-preview {
+    left: 0;
+}
+
+body.resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+body.resizing * {
+    user-select: none;
+}
+
+/* Mobile: hide resize handles */
+@media (max-width: 1023px) {
+    .resize-handle {
+        display: none;
     }
 }

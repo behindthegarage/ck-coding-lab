@@ -8,6 +8,64 @@ from typing import Optional
 from projects.state import build_project_state, serialize_files_snapshot
 
 
+def create_recovery_version_from_state(
+    db,
+    project_id,
+    language,
+    *,
+    current_code='',
+    snapshot_files=None,
+    primary_file=None,
+    reason,
+    dedupe_against_latest=True,
+):
+    """Persist a hidden recovery checkpoint from an already-captured project state."""
+    snapshot_files = snapshot_files or {}
+    current_code = current_code or ''
+    serialized_snapshot = serialize_files_snapshot(snapshot_files)
+
+    if not snapshot_files and not current_code.strip():
+        return None
+
+    if dedupe_against_latest:
+        db.execute(
+            '''
+                SELECT id, code, description, files_snapshot, entry_filename
+                FROM code_versions
+                WHERE project_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            ''',
+            (project_id,),
+        )
+        latest_version = db.fetchone()
+        if latest_version and is_recovery_version_description(latest_version['description']):
+            latest_code = latest_version['code'] or ''
+            latest_snapshot = latest_version['files_snapshot']
+            latest_entry = latest_version['entry_filename']
+            if (
+                latest_code == current_code
+                and latest_snapshot == serialized_snapshot
+                and (latest_entry or '') == (primary_file or '')
+            ):
+                return latest_version['id']
+
+    db.execute(
+        '''
+            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
+            VALUES (?, ?, ?, ?, ?)
+        ''',
+        (
+            project_id,
+            current_code,
+            f'{RECOVERY_VERSION_PREFIX}{reason}',
+            serialized_snapshot,
+            primary_file,
+        ),
+    )
+    return db.lastrowid
+
+
 RECOVERY_VERSION_PREFIX = '__ckcl_recovery__:'
 
 
@@ -36,48 +94,13 @@ def create_recovery_version(db, project_row, reason, *, dedupe_against_latest=Tr
         synthesize_primary_file=True,
     )
 
-    current_code = state.get('current_code') or ''
-    snapshot_files = state.get('snapshot_files') or {}
-    primary_file = state.get('primary_file')
-    serialized_snapshot = serialize_files_snapshot(snapshot_files)
-
-    if not snapshot_files and not current_code.strip():
-        return None
-
-    if dedupe_against_latest:
-        db.execute(
-            '''
-                SELECT id, code, description, files_snapshot, entry_filename
-                FROM code_versions
-                WHERE project_id = ?
-                ORDER BY created_at DESC, id DESC
-                LIMIT 1
-            ''',
-            (project_row['id'],),
-        )
-        latest_version = db.fetchone()
-        if latest_version and is_recovery_version_description(latest_version['description']):
-            latest_code = latest_version['code'] or ''
-            latest_snapshot = latest_version['files_snapshot']
-            latest_entry = latest_version['entry_filename']
-            if (
-                latest_code == current_code
-                and latest_snapshot == serialized_snapshot
-                and (latest_entry or '') == (primary_file or '')
-            ):
-                return latest_version['id']
-
-    db.execute(
-        '''
-            INSERT INTO code_versions (project_id, code, description, files_snapshot, entry_filename)
-            VALUES (?, ?, ?, ?, ?)
-        ''',
-        (
-            project_row['id'],
-            current_code,
-            f'{RECOVERY_VERSION_PREFIX}{reason}',
-            serialized_snapshot,
-            primary_file,
-        ),
+    return create_recovery_version_from_state(
+        db,
+        project_row['id'],
+        language,
+        current_code=state.get('current_code') or '',
+        snapshot_files=state.get('snapshot_files') or {},
+        primary_file=state.get('primary_file'),
+        reason=reason,
+        dedupe_against_latest=dedupe_against_latest,
     )
-    return db.lastrowid

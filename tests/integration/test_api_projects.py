@@ -914,6 +914,66 @@ class TestProjectOversightAndRecoveryAPI:
         assert project['needs_attention'] is False
         assert project['attention_reasons'] == []
 
+    def test_stale_doc_first_kickoff_is_not_flagged_as_needing_attention(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Planning Maze', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM project_files WHERE project_id = ? AND filename = 'index.html'", (project_id,))
+        cursor.execute("UPDATE projects SET current_code = '', created_at = '2026-03-18 12:00:00', updated_at = '2026-03-20 15:00:00' WHERE id = ?", (project_id,))
+        cursor.execute("UPDATE project_files SET updated_at = '2026-03-20 15:00:00' WHERE project_id = ?", (project_id,))
+        cursor.execute(
+            "INSERT INTO conversations (project_id, role, content, created_at) VALUES (?, 'user', ?, '2026-03-20 14:00:00')",
+            (project_id, 'I want a spooky maze game with stars and a timer.'),
+        )
+        cursor.execute(
+            "INSERT INTO conversations (project_id, role, content, created_at) VALUES (?, 'assistant', ?, '2026-03-20 14:05:00')",
+            (project_id, 'I wrote the plan into design.md and todo.md.'),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        project = next(item for item in response.get_json()['projects'] if item['id'] == project_id)
+        assert project['doc_file_count'] >= 2
+        assert project['code_file_count'] == 0
+        assert project['needs_attention'] is False
+        assert project['attention_reasons'] == []
+
+    def test_project_list_sanitizes_assistant_preview(self, client, auth_headers, project_factory, db_path):
+        import sqlite3
+
+        project = project_factory(name='Legacy Preview Project')
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO conversations (project_id, role, content) VALUES (?, 'assistant', ?)",
+            (
+                project['id'],
+                "I'll fix it. <|tool_calls_section_begin|> functions.write_file:1 <|tool_calls_section_end|>\n\n## Questions for you\n- Want sound next?",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        listed = next(item for item in response.get_json()['projects'] if item['id'] == project['id'])
+        assert '<|tool_calls_section_begin|>' not in listed['latest_assistant_preview']
+        assert 'functions.write_file:1' not in listed['latest_assistant_preview']
+        assert 'Questions for you' in listed['latest_assistant_preview']
+
     def test_stale_unsaved_progress_is_flagged_without_checkpoint(self, client, auth_headers, db_path):
         import sqlite3
 

@@ -38,6 +38,32 @@ PROTOTYPE_HINTS = (
     'spike',
 )
 
+ACTIONABLE_SPEC_HINTS = (
+    'player',
+    'enemy',
+    'level',
+    'score',
+    'timer',
+    'collect',
+    'jump',
+    'maze',
+    'platform',
+    'power-up',
+    'lives',
+    'sound',
+    'music',
+    'theme',
+    'goal',
+    'click',
+    'keyboard',
+    'mouse',
+    'touch',
+    'button',
+    'shop',
+    'inventory',
+    'map',
+)
+
 PIVOT_HINTS = (
     'actually',
     'instead',
@@ -161,6 +187,17 @@ def _assistant_recently_asked_questions(conversation_history: Optional[List[Dict
     return any('?' in message or 'questions for you' in _normalize_text(message) for message in recent_assistant_messages)
 
 
+def _message_is_actionable_for_immediate_build(normalized_message: str, raw_message: Optional[str]) -> bool:
+    if not normalized_message:
+        return False
+
+    spec_hits = sum(1 for hint in ACTIONABLE_SPEC_HINTS if hint in normalized_message)
+    has_structured_brief = bool(raw_message and ('\n- ' in raw_message or '\n* ' in raw_message or '\n1.' in raw_message))
+    is_long_brief = len(normalized_message) >= 140
+    is_specific_request = len(normalized_message) >= 80 and spec_hits >= 3
+    return has_structured_brief or is_long_brief or is_specific_request
+
+
 def _conversation_turn_count(conversation_history: Optional[List[Dict]]) -> int:
     return len([entry for entry in (conversation_history or []) if entry.get('role') in {'user', 'assistant'}])
 
@@ -179,6 +216,7 @@ def analyze_workflow_context(
     custom_doc_count = _count_custom_docs(project_files)
     has_meaningful_code = _has_meaningful_code(project_files, language or 'undecided', current_code=current_code)
     assistant_recently_asked = _assistant_recently_asked_questions(conversation_history)
+    actionable_first_brief = _message_is_actionable_for_immediate_build(normalized_message, message)
 
     fast_path_requested = _contains_any(normalized_message, FAST_PATH_HINTS)
     prototype_requested = _contains_any(normalized_message, PROTOTYPE_HINTS)
@@ -206,7 +244,7 @@ def analyze_workflow_context(
     elif mode == 'prototype-mode':
         question_budget = 1
     elif phase == 'guided-kickoff':
-        question_budget = 0 if assistant_recently_asked else 3
+        question_budget = 0 if assistant_recently_asked or actionable_first_brief else 3
     else:
         question_budget = 0 if fast_path_requested else 1
 
@@ -248,6 +286,7 @@ def analyze_workflow_context(
         'should_scaffold_now': should_scaffold_now,
         'should_keep_docs_in_sync': bool(should_synthesize_docs_now or phase != 'guided-kickoff'),
         'assistant_recently_asked_questions': assistant_recently_asked,
+        'actionable_first_brief': actionable_first_brief,
         'fast_path_requested': fast_path_requested,
         'prototype_requested': prototype_requested,
         'pivot_detected': pivot_detected,

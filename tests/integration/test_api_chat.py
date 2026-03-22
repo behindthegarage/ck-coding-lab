@@ -137,6 +137,19 @@ class TestChatAPI:
         project = project_factory(language='p5js')
         project_id = project['id']
 
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO project_files (project_id, filename, content) VALUES (?, 'sketch.js', ?)",
+            (project_id, 'function draw() { ellipse(100, 100, 50, 50); }'),
+        )
+        cursor.execute(
+            "UPDATE projects SET current_code = ? WHERE id = ?",
+            ('function draw() { ellipse(100, 100, 50, 50); }', project_id),
+        )
+        conn.commit()
+        conn.close()
+
         response = client.post(
             f'/api/projects/{project_id}/chat',
             headers=auth_headers,
@@ -167,6 +180,64 @@ class TestChatAPI:
         assert row['description'].startswith('__ckcl_recovery__:After AI update')
         assert row['entry_filename'] == 'sketch.js'
         assert 'ellipse' in row['code']
+
+    def test_chat_existing_project_captures_before_and_after_recovery_points(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': 'function draw() { background(0); ellipse(100, 100, 50, 50); }',
+            'explanation': 'Updated the sketch.',
+            'suggestions': [],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 75,
+            'tool_calls': [],
+            'created_files': []
+        }
+
+        project = project_factory(language='p5js')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO project_files (project_id, filename, content) VALUES (?, 'sketch.js', ?)",
+            (project_id, 'function draw() { ellipse(100, 100, 50, 50); }'),
+        )
+        cursor.execute(
+            "UPDATE projects SET current_code = ? WHERE id = ?",
+            ('function draw() { ellipse(100, 100, 50, 50); }', project_id),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.post(
+            f'/api/projects/{project_id}/chat',
+            headers=auth_headers,
+            json={'message': 'Add a circle on a dark background'}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['response']['pre_update_recovery_version_id'] is not None
+        assert data['response']['recovery_version_id'] is not None
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT description, code FROM code_versions WHERE project_id = ? ORDER BY created_at ASC, id ASC',
+            (project_id,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        descriptions = [row['description'] for row in rows]
+        assert descriptions == [
+            '__ckcl_recovery__:Before AI update',
+            '__ckcl_recovery__:After AI update',
+        ]
+        assert 'background' not in rows[0]['code']
+        assert 'background' in rows[1]['code']
 
     def test_chat_ai_error(self, client, auth_headers, project_factory, mock_ai_client):
         """Test handling of AI generation error."""

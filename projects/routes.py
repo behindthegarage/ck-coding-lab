@@ -29,6 +29,7 @@ from sandbox import CodeValidator
 
 LATEST_PREVIEW_LIMIT = 140
 ATTENTION_ACTIVITY_GRACE = timedelta(hours=24)
+STARTER_DOC_ATTENTION_TURN_GRACE = 4
 REVIEW_FILE_PATTERN = re.compile(r"^###\s+`([^`]+)`", re.MULTILINE)
 REVIEW_SUMMARY_PATTERN = re.compile(r"^- Summary:\s*(.+)$", re.MULTILINE)
 
@@ -64,6 +65,12 @@ LIST_PROJECTS_SQL = f'''
                 OR pf.filename LIKE '%.py'
               )
         ) AS code_file_count,
+        (
+            SELECT COUNT(*)
+            FROM project_files pf
+            WHERE pf.project_id = p.id
+              AND pf.filename IN ('design.md', 'architecture.md', 'todo.md', 'notes.md')
+        ) AS doc_file_count,
         (
             SELECT MAX(pf.updated_at)
             FROM project_files pf
@@ -227,6 +234,7 @@ def _build_attention_reasons(project):
 
     has_runnable_code = has_current_code or code_file_count > 0
     has_checkpoint = version_count > 0 or recovery_version_count > 0
+    doc_file_count = int(project.get('doc_file_count') or 0)
     has_post_create_file_edits = bool(
         latest_file_update_at
         and created_at
@@ -238,11 +246,16 @@ def _build_attention_reasons(project):
         and (latest_checkpoint_at is None or latest_file_update_at > latest_checkpoint_at)
     )
     recently_active = _is_recent_timestamp(latest_activity_at)
+    doc_first_kickoff = bool(
+        not has_runnable_code
+        and doc_file_count >= 2
+        and conversation_count <= STARTER_DOC_ATTENTION_TURN_GRACE
+    )
 
-    if has_meaningful_progress and not has_runnable_code:
+    if has_meaningful_progress and not has_runnable_code and not recently_active and not doc_first_kickoff:
         reasons.append('No runnable code yet')
 
-    if has_meaningful_progress and latest_changes_unprotected and not recently_active:
+    if has_meaningful_progress and latest_changes_unprotected and not recently_active and not doc_first_kickoff:
         reasons.append(
             'Progress has no save or recovery point yet'
             if not has_checkpoint
@@ -255,13 +268,14 @@ def _build_attention_reasons(project):
 
 def _build_project_overview(row):
     project = row_to_dict(row)
-    latest_review = _extract_latest_review(project.get('latest_assistant_message'))
+    sanitized_assistant_message = sanitize_response_text(project.get('latest_assistant_message') or '')
+    latest_review = _extract_latest_review(sanitized_assistant_message)
     latest_activity_at = _compute_latest_activity(project)
 
     project['latest_review'] = latest_review
     project['latest_activity_at'] = latest_activity_at
     project['latest_user_message_preview'] = _safe_preview(project.get('latest_user_message'))
-    project['latest_assistant_preview'] = _safe_preview(project.get('latest_assistant_message'))
+    project['latest_assistant_preview'] = _safe_preview(sanitized_assistant_message)
     project['is_archived'] = bool(project.get('archived_at'))
     project['attention_reasons'] = _build_attention_reasons({**project, 'latest_review': latest_review})
     project['needs_attention'] = bool(project['attention_reasons'])

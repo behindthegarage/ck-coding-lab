@@ -94,6 +94,7 @@ def sanitize_response_text(text: str) -> str:
         cleaned = cleaned.split(TOOL_SUMMARY_MARKER, 1)[0]
 
     cleaned = re.sub(r'(?im)^##+\s+tools used\s*$.*?(?=^##+\s+|\Z)', '', cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r'(?im)^\*\*tool calls:\*\*\s*$.*?(?=^##+\s+|\Z)', '', cleaned, flags=re.DOTALL)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
 

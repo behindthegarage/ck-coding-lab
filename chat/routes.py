@@ -20,7 +20,7 @@ from ai.workflow import analyze_workflow_context
 from chat import chat_bp
 from chat.rate_limit import check_chat_rate_limit
 from projects.access import can_access_project_owner
-from projects.recovery import create_recovery_version
+from projects.recovery import create_recovery_version, create_recovery_version_from_state
 from projects.state import is_code_file, persist_generated_code, sync_current_code_cache
 
 WRITE_TOOL_NAMES = {'write_file', 'append_file'}
@@ -470,6 +470,11 @@ def chat_with_ai(project_id):
         language=language,
         current_code=current_code,
     )
+    pre_ai_state = {
+        'current_code': project_state.get('current_code') or '',
+        'snapshot_files': dict(project_state.get('snapshot_files') or {}),
+        'primary_file': project_state.get('primary_file'),
+    }
 
     # Save user message
     with get_db() as db:
@@ -514,6 +519,7 @@ def chat_with_ai(project_id):
 
     # Save AI response and keep projects.current_code derived from project_files
     recovery_version_id = None
+    pre_update_recovery_version_id = None
     with get_db() as db:
         code_files_touched = any(is_code_file((file_info or {}).get('filename', '')) for file_info in changed_files)
 
@@ -532,6 +538,22 @@ def chat_with_ai(project_id):
         )
 
         if code_files_touched or changed_files or write_tools_used:
+            state_changed = any([
+                (pre_ai_state.get('current_code') or '') != (project_state.get('current_code') or ''),
+                (pre_ai_state.get('snapshot_files') or {}) != (project_state.get('snapshot_files') or {}),
+                (pre_ai_state.get('primary_file') or '') != (project_state.get('primary_file') or ''),
+            ])
+            if state_changed:
+                pre_update_recovery_version_id = create_recovery_version_from_state(
+                    db,
+                    project_id,
+                    language,
+                    current_code=pre_ai_state.get('current_code') or '',
+                    snapshot_files=pre_ai_state.get('snapshot_files') or {},
+                    primary_file=pre_ai_state.get('primary_file'),
+                    reason='Before AI update',
+                )
+
             recovery_version_id = create_recovery_version(
                 db,
                 {
@@ -590,6 +612,7 @@ def chat_with_ai(project_id):
             'doc_updates': doc_updates,
             'change_review': change_review,
             'primary_file': project_state.get('primary_file'),
-            'recovery_version_id': recovery_version_id
+            'recovery_version_id': recovery_version_id,
+            'pre_update_recovery_version_id': pre_update_recovery_version_id,
         }
     })

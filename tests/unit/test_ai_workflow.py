@@ -150,6 +150,27 @@ _None yet_
         assert workflow['should_synthesize_docs_now'] is True
         assert workflow['should_scaffold_now'] is True
 
+    def test_detailed_first_brief_skips_kickoff_questions_and_moves_to_build(self):
+        workflow = analyze_workflow_context(
+            message=(
+                'Make a space maze game for one player.\n'
+                '- collect stars for score\n'
+                '- avoid two robot enemies\n'
+                '- add a 60 second timer\n'
+                '- use keyboard controls and spooky music\n'
+            ),
+            conversation_history=[],
+            project_files=self._starter_project_files('html'),
+            language='html',
+        )
+
+        assert workflow['phase'] == 'guided-kickoff'
+        assert workflow['actionable_first_brief'] is True
+        assert workflow['question_budget'] == 0
+        assert workflow['should_ask_questions_now'] is False
+        assert workflow['should_synthesize_docs_now'] is True
+        assert workflow['should_scaffold_now'] is True
+
     def test_iterative_phase_detects_pivot_and_keeps_docs_in_sync(self):
         project_files = {
             'design.md': '# Design\n\n## Core Features\n- Sword combat\n- Enemy waves\n',
