@@ -75,7 +75,60 @@ GENERIC_CONTEXT_SKIP_PATTERNS = [
     re.compile(r'^add your own twist$', re.IGNORECASE),
     re.compile(r'^what (?:is|one) .+\?$' , re.IGNORECASE),
 ]
+PROSE_DUPLICATE_SPLIT_PATTERN = re.compile(r'(?<=[.!?])\s+|(?<=:)\s+')
 
+
+def _normalize_duplicate_chunk(chunk: str) -> str:
+    normalized = re.sub(r'\s+', ' ', chunk.strip())
+    normalized = re.sub(r'\s*[–—-]\s*', ' — ', normalized)
+    return normalized.lower()
+
+
+def _collapse_repeated_prose(text: str) -> str:
+    paragraphs = text.split('\n\n')
+    collapsed_paragraphs = []
+
+    for paragraph in paragraphs:
+        stripped = paragraph.strip()
+        if not stripped:
+            collapsed_paragraphs.append(paragraph)
+            continue
+
+        if stripped.startswith(('##', '###', '- ', '* ', '```')) or re.match(r'^\d+\.\s', stripped):
+            collapsed_paragraphs.append(paragraph)
+            continue
+
+        chunks = [chunk.strip() for chunk in PROSE_DUPLICATE_SPLIT_PATTERN.split(stripped) if chunk.strip()]
+        if len(chunks) < 2:
+            collapsed_paragraphs.append(paragraph)
+            continue
+
+        normalized_chunks = [_normalize_duplicate_chunk(chunk) for chunk in chunks]
+        collapsed = None
+        max_block = min(4, len(chunks) // 2)
+        for block_size in range(1, max_block + 1):
+            if len(chunks) % block_size != 0 or len(chunks) // block_size < 2:
+                continue
+            block = normalized_chunks[:block_size]
+            repeats = len(chunks) // block_size
+            if all(normalized_chunks[i * block_size:(i + 1) * block_size] == block for i in range(repeats)):
+                collapsed = chunks[:block_size]
+                break
+
+        if collapsed is None:
+            deduped = []
+            previous = None
+            for chunk in chunks:
+                normalized = _normalize_duplicate_chunk(chunk)
+                if previous and normalized == previous and len(normalized) >= 24:
+                    continue
+                deduped.append(chunk)
+                previous = normalized
+            collapsed = deduped
+
+        collapsed_paragraphs.append(' '.join(collapsed))
+
+    return '\n\n'.join(collapsed_paragraphs)
 
 def sanitize_response_text(text: str) -> str:
     """Strip internal tool/transcript artifacts from model-visible and user-visible text."""
@@ -96,6 +149,7 @@ def sanitize_response_text(text: str) -> str:
 
     cleaned = re.sub(r'(?im)^##+\s+tools used\s*$.*?(?=^##+\s+|\Z)', '', cleaned, flags=re.DOTALL)
     cleaned = re.sub(r'(?im)^\*\*tool calls:\*\*\s*$.*?(?=^##+\s+|\Z)', '', cleaned, flags=re.DOTALL)
+    cleaned = _collapse_repeated_prose(cleaned)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
 

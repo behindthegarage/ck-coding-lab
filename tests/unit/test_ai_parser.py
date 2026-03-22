@@ -352,6 +352,21 @@ tool_result_end
         assert result['explanation'] == 'I updated the starter.'
         assert result['suggestions'] == ['Add a score.']
 
+    def test_sanitize_response_text_collapses_repeated_prose_loops(self):
+        content = '''
+I see the issue — the file got truncated. Let me rewrite the complete file with the swinging vines feature:
+I see the issue — the file got truncated. Let me rewrite the complete file with the swinging vines feature:
+I see the issue — the file got truncated. Let me rewrite the complete file with the swinging vines feature:
+
+## What changed
+- Updated `sketch.js`
+'''
+
+        cleaned = sanitize_response_text(content)
+
+        assert cleaned.count('I see the issue') == 1
+        assert '## What changed' in cleaned
+
     def test_sanitize_response_text_removes_inline_legacy_tool_payload_blocks(self):
         content = '''
 I'll work through all four features. Starting with swinging vines.

@@ -2638,6 +2638,54 @@ async function createNewFile() {
     }
 }
 
+function collapseRepeatedAssistantPhrases(content) {
+    const paragraphs = String(content || '').split(/\n\n+/);
+    return paragraphs.map((paragraph) => {
+        const trimmed = paragraph.trim();
+        if (!trimmed) return paragraph;
+        if (/^(##|###|- |\* |```|\d+\.\s)/.test(trimmed)) return paragraph;
+
+        const chunks = trimmed.split(/(?<=[.!?])\s+|(?<=:)\s+/).map((chunk) => chunk.trim()).filter(Boolean);
+        if (chunks.length < 2) return paragraph;
+
+        const normalizedChunks = chunks.map((chunk) => chunk.replace(/\s+/g, ' ').replace(/\s*[–—-]\s*/g, ' — ').trim().toLowerCase());
+        let collapsed = null;
+        const maxBlock = Math.min(4, Math.floor(chunks.length / 2));
+        for (let blockSize = 1; blockSize <= maxBlock; blockSize += 1) {
+            if (chunks.length % blockSize !== 0 || (chunks.length / blockSize) < 2) continue;
+            const block = normalizedChunks.slice(0, blockSize);
+            let matches = true;
+            for (let i = 0; i < chunks.length / blockSize; i += 1) {
+                const candidate = normalizedChunks.slice(i * blockSize, (i + 1) * blockSize);
+                if (candidate.join('||') !== block.join('||')) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                collapsed = chunks.slice(0, blockSize);
+                break;
+            }
+        }
+
+        if (!collapsed) {
+            const deduped = [];
+            let previous = null;
+            chunks.forEach((chunk) => {
+                const normalized = chunk.replace(/\s+/g, ' ').replace(/\s*[–—-]\s*/g, ' — ').trim().toLowerCase();
+                if (previous && normalized === previous && normalized.length >= 24) {
+                    return;
+                }
+                deduped.push(chunk);
+                previous = normalized;
+            });
+            collapsed = deduped;
+        }
+
+        return collapsed.join(' ');
+    }).join('\n\n');
+}
+
 function sanitizeAssistantContent(content) {
     if (!content) return '';
 
@@ -2662,6 +2710,7 @@ function sanitizeAssistantContent(content) {
     cleaned = cleaned.replace(/^\s*(?:[-*]\s*)?(?:`)?(?:(?:functions\.)?(?:read_file|write_file|append_file|list_files))(?:`)?(?:[:#]\d+)?\s*[:(].*$/gmi, '');
     cleaned = cleaned.replace(/^##\s+Tools Used\s*$[\s\S]*?(?=^##\s+|$)/gmi, '');
     cleaned = cleaned.replace(/^\*\*Tool Calls:\*\*\s*$[\s\S]*?(?=^##\s+|$)/gmi, '');
+    cleaned = collapseRepeatedAssistantPhrases(cleaned);
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
     return cleaned.trim();
 }

@@ -18,7 +18,7 @@ class TestWorkspaceRecoverySurface:
         assert 'id="workspace-toast-action"' in html
         assert 'id="workspace-toast-dismiss"' in html
         assert 'Restore a named save point or an automatic checkpoint if you need to roll the project back.' in html
-        assert '/lab/static/css/workspace.css?v=43' in html
+        assert '/lab/static/css/workspace.css?v=44' in html
         assert '/lab/static/js/auth.js?v=8' in html
         assert '/lab/static/js/workspace.js?v=55' in html
         assert '/lab/static/js/workspace-versions.js?v=5' in html
