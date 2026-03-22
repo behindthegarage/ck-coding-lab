@@ -23,7 +23,7 @@
    LEFT SIDEBAR
    ============================================ */
 
-.project-sidebar {
+.workspace-three-pane > .project-sidebar {
     position: relative;
     grid-area: sidebar;
     width: 200px;
@@ -36,13 +36,13 @@
     transition: width 0.3s ease, min-width 0.3s ease;
 }
 
-.project-sidebar.collapsed {
+.workspace-three-pane > .project-sidebar.collapsed {
     width: 0;
     min-width: 0;
     border-right: none;
 }
 
-.project-sidebar.collapsed * {
+.workspace-three-pane > .project-sidebar.collapsed * {
     opacity: 0;
     pointer-events: none;
 }
@@ -586,7 +586,7 @@
             "quickbar quickbar";
     }
 
-    .project-sidebar {
+    .workspace-three-pane > .project-sidebar {
         position: fixed;
         left: 0;
         top: 65px;
@@ -596,11 +596,11 @@
         transition: transform 0.3s ease;
     }
 
-    .project-sidebar.open {
+    .workspace-three-pane > .project-sidebar.open {
         transform: translateX(0);
     }
 
-    .project-sidebar.collapsed {
+    .workspace-three-pane > .project-sidebar.collapsed {
         width: 200px;
         min-width: 200px;
         transform: translateX(-100%);
@@ -636,7 +636,7 @@
             "quickbar";
     }
 
-    .project-sidebar {
+    .workspace-three-pane > .project-sidebar {
         top: 65px;
         bottom: 100px; /* Account for quick actions */
     }
