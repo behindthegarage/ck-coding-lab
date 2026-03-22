@@ -326,6 +326,7 @@ async function loadProject() {
     
     // Update project type badge and labels
     updateProjectTypeUI(project.language);
+    renderQuickActions();
     
     // Load file tree
     loadFileTree();
@@ -1835,23 +1836,7 @@ function updateProjectTypeUI(language) {
                 <p>I'm Hari — your coding partner. I read and write files to track our work.</p>
                 <p class="example">Try: "Make a script that generates random passwords" or "Check todo.md and let's plan"</p>`;
         }
-        // Update quick actions for Python
-        const quickActions = document.querySelector('.quick-actions');
-        if (quickActions) {
-            quickActions.innerHTML = `
-                <button class="quick-btn" data-prompt="Add error handling">🛡️ Add Error Handling</button>
-                <button class="quick-btn" data-prompt="Add comments explaining the code">💬 Add Comments</button>
-                <button class="quick-btn" data-prompt="Fix any bugs">🐛 Fix Bugs</button>
-                <button class="quick-btn" data-prompt="Explain how this works">❓ Explain</button>
-            `;
-            // Re-attach event listeners
-            quickActions.querySelectorAll('.quick-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const prompt = btn.dataset.prompt;
-                    sendMessage(prompt);
-                });
-            });
-        }
+        renderQuickActions();
     } else {
         // Default to p5js
         if (badge) {
@@ -1864,7 +1849,124 @@ function updateProjectTypeUI(language) {
                 <p>I'm Hari — your coding partner. I read and write files to keep track of our work.</p>
                 <p class="example">Try: "Make a game where a ball bounces" or "Check todo.md and let's plan"</p>`;
         }
+        renderQuickActions();
     }
+}
+
+function stagePromptInComposer(prompt, options = {}) {
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const normalized = String(prompt || '').trim();
+    if (!input || !normalized) return;
+
+    input.value = normalized;
+    input.focus();
+    input.setSelectionRange(normalized.length, normalized.length);
+    if (sendBtn) sendBtn.disabled = false;
+
+    if (options.sendNow) {
+        sendMessage(normalized);
+    } else {
+        showWorkspaceToast('Prompt loaded into the chat box — tweak it or press Enter.', 'success', 2200);
+    }
+}
+
+function hasAnyCodeFiles() {
+    return (projectFiles || []).some(file => /\.(js|html|css|py)$/i.test(file.filename || '')) || Boolean((currentCode || '').trim());
+}
+
+function hasPlanningDocs() {
+    const planningDocs = new Set(['design.md', 'architecture.md', 'todo.md', 'notes.md']);
+    return (projectFiles || []).filter(file => planningDocs.has(file.filename || '')).length >= 2;
+}
+
+function getLatestChangedFilename() {
+    const entries = Object.keys(latestAssistantChanges || {});
+    return entries.length ? entries[0] : '';
+}
+
+function buildSmartQuickActions() {
+    const language = project?.language || 'p5js';
+    const latestChangedFile = getLatestChangedFilename();
+    const actions = [];
+
+    if (hasPlanningDocs() && !hasAnyCodeFiles()) {
+        actions.push({ icon: '🧱', label: 'Build first version', prompt: 'Use the planning docs to build the first working version now.' });
+    }
+
+    if (latestChangedFile) {
+        actions.push({ icon: '🔍', label: 'Explain the change', prompt: `Explain what changed in ${latestChangedFile} in simple words for a student.` });
+        actions.push({ icon: '✍️', label: 'Add comments', prompt: `Add comments that explain the new parts in ${latestChangedFile}.` });
+    }
+
+    if (language === 'python') {
+        actions.push({ icon: '🧪', label: 'Test with sample input', prompt: 'Run through a sample input/output check and fix anything confusing.' });
+        actions.push({ icon: '🛡️', label: 'Add error handling', prompt: 'Add error handling and friendly messages for mistakes.' });
+    } else if (language === 'html') {
+        actions.push({ icon: '🎨', label: 'Polish the layout', prompt: 'Improve the layout and styling without changing the main idea.' });
+        actions.push({ icon: '🖱️', label: 'Add interaction', prompt: 'Add one small interactive feature the student can play with.' });
+    } else {
+        actions.push({ icon: '🏆', label: 'Add score', prompt: 'Add a score system the player can understand right away.' });
+        actions.push({ icon: '🎮', label: 'Make it feel better', prompt: 'Improve the controls or game feel in one noticeable way.' });
+    }
+
+    actions.push({ icon: '🧑‍🏫', label: 'Give me a tiny task', prompt: 'Give me one tiny change I can make myself, and tell me exactly where to edit.' });
+    actions.push({ icon: '🐛', label: 'Fix bugs', prompt: 'Test the current project and fix any obvious bugs.' });
+
+    const deduped = [];
+    const seen = new Set();
+    actions.forEach(action => {
+        const key = `${action.label}|${action.prompt}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(action);
+        }
+    });
+    return deduped.slice(0, 4);
+}
+
+function renderQuickActions() {
+    const quickActions = document.querySelector('.quick-actions');
+    if (!quickActions) return;
+
+    const actions = buildSmartQuickActions();
+    quickActions.innerHTML = actions.map(action => `
+        <button class="quick-btn" data-prompt="${escapeHtml(action.prompt)}" type="button">
+            <span class="quick-btn-icon">${action.icon}</span>
+            <span>${escapeHtml(action.label)}</span>
+        </button>
+    `).join('');
+}
+
+function buildCoachPrompts(data) {
+    const prompts = [];
+    const primaryFile = data.primaryFile || (data.changedFiles?.[0]?.filename) || '';
+
+    if (primaryFile) {
+        prompts.push(`Explain what changed in ${primaryFile} in simple words.`);
+        prompts.push(`Give me one tiny change I can make myself in ${primaryFile}.`);
+    }
+
+    if ((data.changeReview || []).length > 0) {
+        prompts.push('Add comments explaining the new code.');
+    }
+
+    prompts.push('Test the new version and fix one bug if you find one.');
+    return [...new Set(prompts)].slice(0, 3);
+}
+
+function renderPromptChipSection(title, prompts = [], chipClass = 'assistant-prompt-chip') {
+    if (!prompts || prompts.length === 0) return '';
+    return `
+        <section class="assistant-context-card assistant-prompt-card">
+            <p class="assistant-section-label">${escapeHtml(title)}</p>
+            <div class="assistant-prompt-chip-row">
+                ${prompts.map(prompt => `
+                    <button class="${chipClass}" type="button" data-stage-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>
+                `).join('')}
+            </div>
+        </section>
+    `;
 }
 
 // Format text with proper line breaks and basic markdown
@@ -1926,6 +2028,7 @@ function loadConversations() {
         setLatestAssistantChanges(latestChangedFiles);
     }
     loadFileTree();
+    renderQuickActions();
     container.scrollTop = container.scrollHeight;
 }
 
@@ -2118,7 +2221,7 @@ function renderAssistantBubble(data, model, timestamp) {
     const decisionNotesHtml = renderContextCard('Why this approach', data.decisionNotes || [], 'assistant-context-card');
     const assumptionsHtml = renderContextCard('Assumptions', data.assumptions || [], 'assistant-context-card assistant-assumptions-card');
     const docUpdatesHtml = renderDocUpdates(data.docUpdates || []);
-    const followUpQuestionsHtml = renderContextCard('Questions for you', data.followUpQuestions || [], 'assistant-questions-card');
+    const followUpQuestionsHtml = renderPromptChipSection('Questions you can answer', data.followUpQuestions || [], 'assistant-prompt-chip assistant-question-chip');
     const changedFiles = data.changedFiles || [];
     const visibleChangedFiles = (data.docUpdates && data.docUpdates.length > 0)
         ? changedFiles.filter(file => !isDocPlanningFile(file.filename))
@@ -2126,7 +2229,8 @@ function renderAssistantBubble(data, model, timestamp) {
     const changedFilesHtml = renderChangedFiles(visibleChangedFiles, data.primaryFile || '');
     const primaryFileHtml = renderPrimaryFile(data.primaryFile, visibleChangedFiles);
     const changeReviewHtml = renderChangeReview(data.changeReview || []);
-    const suggestions = data.suggestions || [];
+    const suggestionChipsHtml = renderPromptChipSection('Try this next', data.suggestions || [], 'assistant-prompt-chip');
+    const coachPromptsHtml = renderPromptChipSection('Good next moves', buildCoachPrompts(data), 'assistant-prompt-chip assistant-coach-chip');
 
     return `
         <div class="message-bubble">
@@ -2138,12 +2242,8 @@ function renderAssistantBubble(data, model, timestamp) {
             ${changeReviewHtml}
             ${primaryFileHtml}
             ${followUpQuestionsHtml}
-            ${suggestions.length > 0 ? `
-                <div class="suggestions">
-                    <p><strong>Ideas to try:</strong></p>
-                    <ul>${suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
-                </div>
-            ` : ''}
+            ${suggestionChipsHtml}
+            ${coachPromptsHtml}
         </div>
         <div class="message-meta">Hari · ${model || 'kimi'} · ${formatTime(timestamp)}</div>
     `;
@@ -2243,6 +2343,7 @@ async function sendMessage(message) {
                 primaryFile: data.response.primary_file || ''
             }, data.response.model || 'kimi', new Date().toISOString());
             container.appendChild(assistantMsg);
+            renderQuickActions();
             container.scrollTop = container.scrollHeight;
 
             if (data.response.recovery_version_id && (hasFileChanges || hasToolCalls || data.response.code)) {
@@ -2288,6 +2389,7 @@ async function refreshFileTree() {
         reconcileWorkspaceTreeState();
         updateCodeDisplay();
         loadFileTree();
+        renderQuickActions();
     }
 }
 
@@ -2828,6 +2930,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('chat-messages').addEventListener('click', async (event) => {
+        const promptButton = event.target.closest('[data-stage-prompt]');
+        if (promptButton) {
+            event.preventDefault();
+            stagePromptInComposer(promptButton.dataset.stagePrompt);
+            return;
+        }
+
         const fileButton = event.target.closest('[data-open-file]');
         if (!fileButton) return;
 
@@ -2850,11 +2959,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Quick action buttons
-    document.querySelectorAll('.quick-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const prompt = btn.dataset.prompt;
-            sendMessage(prompt);
-        });
+    document.querySelector('.quick-actions')?.addEventListener('click', (event) => {
+        const btn = event.target.closest('.quick-btn');
+        if (!btn) return;
+        const prompt = btn.dataset.prompt;
+        stagePromptInComposer(prompt);
     });
 
     // Run button

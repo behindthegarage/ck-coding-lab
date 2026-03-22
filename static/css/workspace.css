@@ -495,6 +495,13 @@
     cursor: pointer;
     transition: all 0.2s;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.quick-btn-icon {
+    font-size: 0.95rem;
 }
 
 .quick-btn:hover {
@@ -1986,6 +1993,53 @@
 
 .assistant-context-list li {
     line-height: 1.45;
+}
+
+.assistant-prompt-card {
+    border-color: rgba(168, 85, 247, 0.24);
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(15, 23, 42, 0.72));
+}
+
+.assistant-prompt-chip-row {
+    margin-top: 0.7rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.assistant-prompt-chip {
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    background: rgba(30, 41, 59, 0.86);
+    color: #f5f3ff;
+    border-radius: 999px;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.84rem;
+    line-height: 1.35;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s ease;
+}
+
+.assistant-prompt-chip:hover {
+    background: rgba(76, 29, 149, 0.28);
+    border-color: rgba(196, 181, 253, 0.5);
+    transform: translateY(-1px);
+}
+
+.assistant-question-chip {
+    border-color: rgba(245, 158, 11, 0.34);
+}
+
+.assistant-question-chip:hover {
+    background: rgba(146, 64, 14, 0.28);
+}
+
+.assistant-coach-chip {
+    border-color: rgba(96, 165, 250, 0.34);
+}
+
+.assistant-coach-chip:hover {
+    background: rgba(30, 64, 175, 0.24);
 }
 
 .assistant-assumptions-card {
