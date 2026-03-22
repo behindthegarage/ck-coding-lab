@@ -239,6 +239,60 @@ class TestChatAPI:
         assert 'background' not in rows[0]['code']
         assert 'background' in rows[1]['code']
 
+    def test_discussion_only_chat_does_not_persist_new_code(self, client, auth_headers, project_factory, db_path, mock_ai_client):
+        mock_ai_client.generate_code.return_value = {
+            'success': True,
+            'code': 'function draw() { background(0); }',
+            'explanation': 'Start by opening sketch.js. Add one line inside draw().',
+            'suggestions': ['Change the fill color next'],
+            'full_response': 'response',
+            'model': 'kimi-k2.5',
+            'tokens_used': 44,
+            'tool_calls': [],
+            'created_files': [],
+            'workflow': {
+                'discussion_only': True,
+                'should_edit_files': False,
+            }
+        }
+
+        project = project_factory(language='p5js')
+        project_id = project['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO project_files (project_id, filename, content) VALUES (?, 'sketch.js', ?)",
+            (project_id, 'function draw() { ellipse(100, 100, 50, 50); }'),
+        )
+        cursor.execute(
+            "UPDATE projects SET current_code = ? WHERE id = ?",
+            ('function draw() { ellipse(100, 100, 50, 50); }', project_id),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.post(
+            f'/api/projects/{project_id}/chat',
+            headers=auth_headers,
+            json={'message': 'Give me one tiny change I can make myself.'}
+        )
+
+        assert response.status_code == 200
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT current_code FROM projects WHERE id = ?', (project_id,))
+        row = cursor.fetchone()
+        cursor.execute('SELECT COUNT(*) FROM code_versions WHERE project_id = ?', (project_id,))
+        version_count = cursor.fetchone()[0]
+        conn.close()
+
+        assert 'ellipse' in row['current_code']
+        assert 'background(0)' not in row['current_code']
+        assert version_count == 0
+
     def test_chat_ai_error(self, client, auth_headers, project_factory, mock_ai_client):
         """Test handling of AI generation error."""
         mock_ai_client.generate_code.return_value = {

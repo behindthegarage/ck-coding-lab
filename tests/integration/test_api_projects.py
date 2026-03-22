@@ -1043,6 +1043,33 @@ class TestProjectOversightAndRecoveryAPI:
         assert project['health_level'] == 'planning'
         assert project['health']['label'] == 'Planning'
 
+    def test_suspicious_filename_marks_project_as_risky(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Suspicious File Project', 'language': 'p5js'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO project_files (project_id, filename, content) VALUES (?, ?, ?)",
+            (project_id, 'circle(mouseX, mouseY, 48);', 'oops'),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        project = next(item for item in response.get_json()['projects'] if item['id'] == project_id)
+        assert project['health_level'] == 'risky'
+        assert 'Suspicious file state detected' in project['health_summary']
+        assert 'suspicious-filenames' in project['health_flags']
+
     def test_hidden_recovery_checkpoint_counts_as_protection_without_inflating_save_points(self, client, auth_headers, db_path):
         import sqlite3
 

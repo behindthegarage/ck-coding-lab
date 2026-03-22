@@ -549,6 +549,40 @@ class TestExecuteTool:
         assert result['success'] is True
         assert result['action'] == 'created'
     
+    def test_reject_invalid_filename_on_write(self, fresh_db):
+        """Code-like filenames should be rejected before they hit the DB."""
+        from ai.tools import FileTools
+        import sqlite3
+
+        conn = sqlite3.connect(fresh_db)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO users (username, pin_hash, role)
+            VALUES (?, ?, ?)
+        ''', ('testuser_invalid', 'hash', 'kid'))
+        user_id = cursor.lastrowid
+        cursor.execute('''
+            INSERT INTO projects (user_id, name, description, language)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, 'Test', 'Desc', 'p5js'))
+        project_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        tools = FileTools(project_id=project_id)
+        result = tools.write_file('circle(mouseX, mouseY, 48);', 'oops')
+
+        assert result['success'] is False
+        assert result['error'] == 'Invalid filename'
+
+        conn = sqlite3.connect(fresh_db)
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM project_files WHERE project_id = ?', (project_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+
+        assert count == 0
+
     def test_execute_unknown_tool(self):
         """Test executing unknown tool returns error."""
         from ai.tools import FileTools

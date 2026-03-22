@@ -171,6 +171,20 @@ _None yet_
         assert workflow['should_synthesize_docs_now'] is True
         assert workflow['should_scaffold_now'] is True
 
+    def test_discussion_only_prompt_avoids_file_edits(self):
+        workflow = analyze_workflow_context(
+            message='Give me one tiny change I can make myself, and tell me exactly where to edit.',
+            conversation_history=[
+                {'role': 'assistant', 'content': 'I built the first version.'}
+            ],
+            project_files=self._starter_project_files('p5js'),
+            language='p5js',
+        )
+
+        assert workflow['discussion_only'] is True
+        assert workflow['should_edit_files'] is False
+        assert workflow['should_scaffold_now'] is False
+
     def test_iterative_phase_detects_pivot_and_keeps_docs_in_sync(self):
         project_files = {
             'design.md': '# Design\n\n## Core Features\n- Sword combat\n- Enemy waves\n',
