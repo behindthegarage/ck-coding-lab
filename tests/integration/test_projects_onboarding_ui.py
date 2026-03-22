@@ -49,6 +49,9 @@ class TestProjectsOnboardingSurface:
         assert 'id="owner-filter"' in html
         assert 'id="status-filter"' in html
         assert 'data-quick-filter="needs-attention"' in html
+        assert 'data-quick-filter="risky"' in html
+        assert 'data-quick-filter="planning"' in html
+        assert 'Health priority' in html
         assert 'Recovery &amp; cleanup tools' in html or 'Recovery & cleanup tools' in html
         assert 'id="project-action-modal"' in html
 
@@ -61,6 +64,9 @@ class TestProjectsOnboardingSurface:
         assert "const RECENT_PROJECTS_KEY = 'ckcl-recent-projects';" in js
         assert 'function rememberRecentProject(projectId)' in js
         assert 'function getFilteredProjects()' in js
+        assert 'health-priority' in js
+        assert "['risky', 'stuck'].includes(project.health_level)" in js
+        assert 'project.health_summary' in js
         assert "data-action=\"versions\"" in js
         assert 'async function duplicateProject(project)' in js
         assert 'async function toggleProjectArchive(project)' in js

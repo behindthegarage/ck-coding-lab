@@ -369,8 +369,9 @@ function renderSummaryCards(filteredProjects) {
     const allProjects = projects || [];
     const allActive = allProjects.filter((project) => !project.is_archived);
     const visible = filteredProjects || [];
-    const recentlyOpened = allProjects.filter((project) => isRecentlyOpened(project.id));
-    const needsAttention = allProjects.filter((project) => project.needs_attention);
+    const riskyProjects = allProjects.filter((project) => project.health_level === 'risky' || project.health_level === 'stuck');
+    const planningProjects = allProjects.filter((project) => project.health_level === 'planning');
+    const watchProjects = allProjects.filter((project) => project.health_level === 'watch');
 
     summaryContainer.innerHTML = `
         <article class="summary-card">
@@ -379,19 +380,19 @@ function renderSummaryCards(filteredProjects) {
             <span class="summary-note">${allProjects.length} total loaded in this scope</span>
         </article>
         <article class="summary-card">
-            <span class="summary-label">Active projects</span>
-            <strong class="summary-value">${allActive.length}</strong>
+            <span class="summary-label">Healthy / active</span>
+            <strong class="summary-value">${allActive.length - riskyProjects.length - planningProjects.length}</strong>
             <span class="summary-note">${projectSummary.archived_projects || 0} archived and safely out of the way</span>
         </article>
-        <article class="summary-card">
-            <span class="summary-label">Needs attention</span>
-            <strong class="summary-value">${needsAttention.length}</strong>
-            <span class="summary-note">Stale projects without backup checkpoints or runnable code</span>
+        <article class="summary-card summary-card-alert">
+            <span class="summary-label">Risky / stuck</span>
+            <strong class="summary-value">${riskyProjects.length}</strong>
+            <span class="summary-note">Projects that likely need teacher eyes or a safer checkpoint</span>
         </article>
         <article class="summary-card">
-            <span class="summary-label">Recently opened</span>
-            <strong class="summary-value">${recentlyOpened.length}</strong>
-            <span class="summary-note">Local shortcuts for getting back to what mattered last</span>
+            <span class="summary-label">Planning / watch</span>
+            <strong class="summary-value">${planningProjects.length + watchProjects.length}</strong>
+            <span class="summary-note">Promising work that may just need the next push or a save point</span>
         </article>
     `;
 }
@@ -473,6 +474,10 @@ function getFilteredProjects() {
         filtered = filtered.filter((project) => projectMatchesRecentActivity(project));
     } else if (quickFilter === 'needs-attention') {
         filtered = filtered.filter((project) => project.needs_attention && !project.is_archived);
+    } else if (quickFilter === 'risky') {
+        filtered = filtered.filter((project) => ['risky', 'stuck'].includes(project.health_level) && !project.is_archived);
+    } else if (quickFilter === 'planning') {
+        filtered = filtered.filter((project) => ['planning', 'watch'].includes(project.health_level) && !project.is_archived);
     } else if (quickFilter === 'no-save') {
         filtered = filtered.filter((project) => Number(project.version_count || 0) === 0 && !project.is_archived);
     } else if (quickFilter === 'archived') {
@@ -487,6 +492,11 @@ function getFilteredProjects() {
 
         if (sortFilter === 'needs-attention') {
             return Number(Boolean(b.needs_attention)) - Number(Boolean(a.needs_attention))
+                || String(b.latest_activity_at || '').localeCompare(String(a.latest_activity_at || ''));
+        }
+
+        if (sortFilter === 'health-priority') {
+            return Number((a.health?.sort_rank ?? 99)) - Number((b.health?.sort_rank ?? 99))
                 || String(b.latest_activity_at || '').localeCompare(String(a.latest_activity_at || ''));
         }
 
@@ -521,6 +531,9 @@ function buildProjectCard(project) {
     const recentActivityBadge = projectMatchesRecentActivity(project)
         ? '<span class="status-badge recent">Recent activity</span>'
         : '';
+    const health = project.health || {};
+    const healthLevel = health.level || 'healthy';
+    const healthBadge = `<span class="health-badge ${escapeHtml(healthLevel)}">${escapeHtml(health.label || 'Healthy')}</span>`;
     const ownerLine = isAdmin ? `<div class="project-owner">Owner: <strong>${escapeHtml(project.owner_username || 'unknown')}</strong></div>` : '';
     const description = escapeHtml(project.description || 'No description yet.');
     const latestPrompt = project.latest_user_message_preview
@@ -554,7 +567,10 @@ function buildProjectCard(project) {
                 <div class="project-title-group">
                     <div class="project-title-row">
                         <h3>${escapeHtml(project.name)}</h3>
-                        <span class="lang-badge ${langClass}">${escapeHtml(getLanguageLabel(project.language))}</span>
+                        <div class="project-title-badges">
+                            ${healthBadge}
+                            <span class="lang-badge ${langClass}">${escapeHtml(getLanguageLabel(project.language))}</span>
+                        </div>
                     </div>
                     ${ownerLine}
                     <div class="project-meta-line">Last active ${escapeHtml(getTimeAgo(project.latest_activity_at || project.updated_at))} • Updated ${escapeHtml(formatAbsoluteDate(project.updated_at))}</div>
@@ -567,6 +583,7 @@ function buildProjectCard(project) {
                 ${recentlyOpened}
             </div>
 
+            <div class="project-health-summary">${escapeHtml(project.health_summary || 'Ready to keep building.')}</div>
             <p class="project-description">${description}</p>
 
             <div class="project-stats-row">

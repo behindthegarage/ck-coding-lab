@@ -895,6 +895,8 @@ class TestProjectOversightAndRecoveryAPI:
         assert project['latest_review']['headline'] == 'index.html • 3 added'
         assert project['latest_user_message_preview'].startswith('Please fix the eruption button')
         assert project['needs_attention'] is False
+        assert project['health_level'] == 'healthy'
+        assert project['health']['label'] == 'Healthy'
 
 
     def test_recent_runnable_project_without_manual_save_is_not_flagged(self, client, auth_headers):
@@ -1004,7 +1006,42 @@ class TestProjectOversightAndRecoveryAPI:
         assert project['version_count'] == 0
         assert project['recovery_version_count'] == 0
         assert project['needs_attention'] is True
+        assert project['health_level'] == 'risky'
         assert 'Progress has no save or recovery point yet' in project['attention_reasons']
+
+    def test_doc_first_project_gets_planning_health_without_attention(self, client, auth_headers, db_path):
+        import sqlite3
+
+        create_response = client.post(
+            '/api/projects',
+            headers=auth_headers,
+            json={'name': 'Planning Health Project', 'language': 'html'},
+        )
+        project_id = create_response.get_json()['project']['id']
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM project_files WHERE project_id = ? AND filename = 'index.html'", (project_id,))
+        cursor.execute("UPDATE projects SET current_code = '', created_at = '2026-03-18 12:00:00', updated_at = '2026-03-20 15:00:00' WHERE id = ?", (project_id,))
+        cursor.execute("UPDATE project_files SET updated_at = '2026-03-20 15:00:00' WHERE project_id = ?", (project_id,))
+        cursor.execute(
+            "INSERT INTO conversations (project_id, role, content, created_at) VALUES (?, 'user', ?, '2026-03-20 14:00:00')",
+            (project_id, 'I want to map out the game before coding it.'),
+        )
+        cursor.execute(
+            "INSERT INTO conversations (project_id, role, content, created_at) VALUES (?, 'assistant', ?, '2026-03-20 14:05:00')",
+            (project_id, 'I wrote the plan into design.md and todo.md.'),
+        )
+        conn.commit()
+        conn.close()
+
+        response = client.get('/api/projects', headers=auth_headers)
+
+        assert response.status_code == 200
+        project = next(item for item in response.get_json()['projects'] if item['id'] == project_id)
+        assert project['needs_attention'] is False
+        assert project['health_level'] == 'planning'
+        assert project['health']['label'] == 'Planning'
 
     def test_hidden_recovery_checkpoint_counts_as_protection_without_inflating_save_points(self, client, auth_headers, db_path):
         import sqlite3

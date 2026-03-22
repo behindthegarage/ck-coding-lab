@@ -178,6 +178,11 @@
             padding: 1rem 1.1rem;
         }
 
+        .summary-card.summary-card-alert {
+            border-color: rgba(248, 113, 113, 0.35);
+            box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
+        }
+
         .summary-label {
             font-size: 0.8rem;
             text-transform: uppercase;
@@ -337,6 +342,14 @@
             gap: 0.5rem;
             flex-wrap: wrap;
             align-items: center;
+            justify-content: space-between;
+        }
+
+        .project-title-badges {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            align-items: center;
         }
 
         .project-title-group h3 {
@@ -387,10 +400,39 @@
         .status-badge.archived { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.24); }
         .status-badge.recent { background: rgba(96, 165, 250, 0.15); color: #bfdbfe; border: 1px solid rgba(96, 165, 250, 0.25); }
 
+        .health-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.36rem 0.72rem;
+            font-size: 0.77rem;
+            font-weight: 800;
+            line-height: 1;
+            border: 1px solid transparent;
+        }
+
+        .health-badge.healthy { background: rgba(34, 197, 94, 0.12); color: #bbf7d0; border-color: rgba(34, 197, 94, 0.2); }
+        .health-badge.watch { background: rgba(250, 204, 21, 0.14); color: #fde68a; border-color: rgba(250, 204, 21, 0.24); }
+        .health-badge.planning { background: rgba(96, 165, 250, 0.14); color: #bfdbfe; border-color: rgba(96, 165, 250, 0.25); }
+        .health-badge.risky,
+        .health-badge.stuck { background: rgba(248, 113, 113, 0.14); color: #fecaca; border-color: rgba(248, 113, 113, 0.24); }
+        .health-badge.archived { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.24); }
+
         .meta-chip {
             background: rgba(15, 23, 42, 0.55);
             color: #cbd5e1;
             border: 1px solid rgba(71, 85, 105, 0.45);
+        }
+
+        .project-health-summary {
+            margin: 0;
+            color: #e2e8f0;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            padding: 0.7rem 0.85rem;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 0.42);
+            border: 1px solid rgba(71, 85, 105, 0.32);
         }
 
         .project-description {
@@ -878,6 +920,7 @@
                         <option value="recent-activity">Recent activity</option>
                         <option value="recent-opened">Recently opened</option>
                         <option value="needs-attention">Needs attention first</option>
+                        <option value="health-priority">Health priority</option>
                         <option value="most-files">Most files</option>
                         <option value="most-versions">Most save points</option>
                         <option value="name">Project name</option>
@@ -890,6 +933,8 @@
                     <button class="quick-filter-chip" data-quick-filter="recent-opened" type="button">Recently opened</button>
                     <button class="quick-filter-chip" data-quick-filter="recent-activity" type="button">Recent activity</button>
                     <button class="quick-filter-chip" data-quick-filter="needs-attention" type="button">Needs attention</button>
+                    <button class="quick-filter-chip" data-quick-filter="risky" type="button">Risky / stuck</button>
+                    <button class="quick-filter-chip" data-quick-filter="planning" type="button">Planning / watch</button>
                     <button class="quick-filter-chip" data-quick-filter="no-save" type="button">No save point</button>
                     <button class="quick-filter-chip" data-quick-filter="archived" type="button">Archived</button>
                 </div>

@@ -212,15 +212,12 @@ def _compute_latest_activity(project):
 
 
 
-def _build_attention_reasons(project):
-    if project.get('archived_at'):
-        return []
-
-    reasons = []
+def _compute_project_signals(project):
     version_count = int(project.get('version_count') or 0)
     recovery_version_count = int(project.get('recovery_version_count') or 0)
     conversation_count = int(project.get('conversation_count') or 0)
     code_file_count = int(project.get('code_file_count') or 0)
+    doc_file_count = int(project.get('doc_file_count') or 0)
     has_current_code = bool((project.get('current_code') or '').strip())
     latest_review = project.get('latest_review') or {}
 
@@ -234,7 +231,6 @@ def _build_attention_reasons(project):
 
     has_runnable_code = has_current_code or code_file_count > 0
     has_checkpoint = version_count > 0 or recovery_version_count > 0
-    doc_file_count = int(project.get('doc_file_count') or 0)
     has_post_create_file_edits = bool(
         latest_file_update_at
         and created_at
@@ -252,17 +248,105 @@ def _build_attention_reasons(project):
         and conversation_count <= STARTER_DOC_ATTENTION_TURN_GRACE
     )
 
-    if has_meaningful_progress and not has_runnable_code and not recently_active and not doc_first_kickoff:
+    return {
+        'version_count': version_count,
+        'recovery_version_count': recovery_version_count,
+        'conversation_count': conversation_count,
+        'code_file_count': code_file_count,
+        'doc_file_count': doc_file_count,
+        'has_current_code': has_current_code,
+        'latest_review': latest_review,
+        'has_runnable_code': has_runnable_code,
+        'has_checkpoint': has_checkpoint,
+        'has_post_create_file_edits': has_post_create_file_edits,
+        'has_meaningful_progress': has_meaningful_progress,
+        'latest_changes_unprotected': latest_changes_unprotected,
+        'recently_active': recently_active,
+        'doc_first_kickoff': doc_first_kickoff,
+    }
+
+
+def _build_attention_reasons(project):
+    if project.get('archived_at'):
+        return []
+
+    reasons = []
+    signals = _compute_project_signals(project)
+
+    if signals['has_meaningful_progress'] and not signals['has_runnable_code'] and not signals['recently_active'] and not signals['doc_first_kickoff']:
         reasons.append('No runnable code yet')
 
-    if has_meaningful_progress and latest_changes_unprotected and not recently_active and not doc_first_kickoff:
+    if signals['has_meaningful_progress'] and signals['latest_changes_unprotected'] and not signals['recently_active'] and not signals['doc_first_kickoff']:
         reasons.append(
             'Progress has no save or recovery point yet'
-            if not has_checkpoint
+            if not signals['has_checkpoint']
             else 'Latest changes are newer than the last checkpoint'
         )
 
     return reasons[:3]
+
+
+def _build_project_health(project):
+    if project.get('archived_at'):
+        return {
+            'level': 'archived',
+            'label': 'Archived',
+            'summary': 'Safely tucked away.',
+            'sort_rank': 4,
+            'flags': ['archived'],
+        }
+
+    signals = _compute_project_signals(project)
+    attention_reasons = project.get('attention_reasons') or _build_attention_reasons(project)
+    flags = []
+
+    if signals['doc_first_kickoff']:
+        flags.append('doc-first')
+    if not signals['has_runnable_code']:
+        flags.append('no-runnable-code')
+    if not signals['has_checkpoint'] and signals['has_meaningful_progress']:
+        flags.append('no-checkpoint')
+    if signals['latest_changes_unprotected']:
+        flags.append('changes-newer-than-checkpoint')
+    if signals['recently_active']:
+        flags.append('recent-activity')
+
+    if attention_reasons:
+        risky_backup = any('save or recovery point' in reason.lower() or 'checkpoint' in reason.lower() for reason in attention_reasons)
+        level = 'risky' if risky_backup else 'stuck'
+        return {
+            'level': level,
+            'label': 'Risky' if level == 'risky' else 'Stuck',
+            'summary': attention_reasons[0],
+            'sort_rank': 0 if level == 'risky' else 1,
+            'flags': flags,
+        }
+
+    if signals['doc_first_kickoff']:
+        return {
+            'level': 'planning',
+            'label': 'Planning',
+            'summary': 'Doc-first kickoff is underway; code can come next.',
+            'sort_rank': 2,
+            'flags': flags,
+        }
+
+    if signals['has_meaningful_progress'] and (not signals['has_checkpoint'] or signals['latest_changes_unprotected']):
+        return {
+            'level': 'watch',
+            'label': 'Watch',
+            'summary': 'Recent work looks active, but it could use a clean checkpoint soon.',
+            'sort_rank': 2,
+            'flags': flags,
+        }
+
+    return {
+        'level': 'healthy',
+        'label': 'Healthy',
+        'summary': 'Runnable work looks covered and calm.',
+        'sort_rank': 3,
+        'flags': flags,
+    }
 
 
 
@@ -279,6 +363,10 @@ def _build_project_overview(row):
     project['is_archived'] = bool(project.get('archived_at'))
     project['attention_reasons'] = _build_attention_reasons({**project, 'latest_review': latest_review})
     project['needs_attention'] = bool(project['attention_reasons'])
+    project['health'] = _build_project_health({**project, 'latest_review': latest_review, 'attention_reasons': project['attention_reasons']})
+    project['health_level'] = project['health']['level']
+    project['health_summary'] = project['health']['summary']
+    project['health_flags'] = project['health']['flags']
     project['status'] = (
         'archived'
         if project['is_archived']
@@ -371,6 +459,9 @@ def list_projects():
         'needs_attention_projects': sum(1 for project in projects if project.get('needs_attention')),
         'active_projects': sum(1 for project in projects if not project.get('is_archived')),
         'recent_projects': sum(1 for project in projects if project.get('latest_activity_at') == project.get('updated_at')),
+        'risky_projects': sum(1 for project in projects if (project.get('health') or {}).get('level') == 'risky'),
+        'planning_projects': sum(1 for project in projects if (project.get('health') or {}).get('level') == 'planning'),
+        'watch_projects': sum(1 for project in projects if (project.get('health') or {}).get('level') == 'watch'),
     }
 
     return jsonify({
