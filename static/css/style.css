@@ -1771,6 +1771,35 @@ body {
     --space-6: 1.25rem;
     --space-8: 1.5rem;
   }
+
+  .app-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .project-title {
+    width: 100%;
+    order: 3;
+    flex-wrap: wrap;
+  }
+
+  .project-title h1 {
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+  }
+
+  .user-menu {
+    width: 100%;
+    order: 4;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .user-menu .btn-small,
+  .user-menu button {
+    flex: 1 1 140px;
+  }
   
   .projects-header {
     flex-direction: column;

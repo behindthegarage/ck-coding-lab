@@ -22,6 +22,9 @@ from projects.state import (
 from projects.utils import (
     MAX_PROJECT_DESCRIPTION_LENGTH,
     create_default_files,
+    is_valid_project_filename,
+    language_label,
+    looks_suspicious_project_filename,
     normalize_project_language,
 )
 from sandbox import CodeValidator
@@ -76,6 +79,11 @@ LIST_PROJECTS_SQL = f'''
             FROM project_files pf
             WHERE pf.project_id = p.id
         ) AS latest_file_update_at,
+        (
+            SELECT GROUP_CONCAT(pf.filename, '||')
+            FROM project_files pf
+            WHERE pf.project_id = p.id
+        ) AS project_file_names,
         (
             SELECT COUNT(*)
             FROM code_versions cv
@@ -311,6 +319,20 @@ def _build_project_health(project):
     if signals['recently_active']:
         flags.append('recent-activity')
 
+    suspicious_files = [
+        filename for filename in (project.get('project_file_names') or [])
+        if looks_suspicious_project_filename(filename)
+    ]
+    if suspicious_files:
+        flags.append('suspicious-filenames')
+        return {
+            'level': 'risky',
+            'label': 'Risky',
+            'summary': f'Suspicious file state detected ({suspicious_files[0]}).',
+            'sort_rank': 0,
+            'flags': flags,
+        }
+
     if attention_reasons:
         risky_backup = any('save or recovery point' in reason.lower() or 'checkpoint' in reason.lower() for reason in attention_reasons)
         level = 'risky' if risky_backup else 'stuck'
@@ -349,7 +371,6 @@ def _build_project_health(project):
     }
 
 
-
 def _build_project_overview(row):
     project = row_to_dict(row)
     sanitized_assistant_message = sanitize_response_text(project.get('latest_assistant_message') or '')
@@ -358,6 +379,7 @@ def _build_project_overview(row):
 
     project['latest_review'] = latest_review
     project['latest_activity_at'] = latest_activity_at
+    project['project_file_names'] = (project.get('project_file_names') or '').split('||') if project.get('project_file_names') else []
     project['latest_user_message_preview'] = _safe_preview(project.get('latest_user_message'))
     project['latest_assistant_preview'] = _safe_preview(sanitized_assistant_message)
     project['is_archived'] = bool(project.get('archived_at'))

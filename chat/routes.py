@@ -520,12 +520,13 @@ def chat_with_ai(project_id):
     # Save AI response and keep projects.current_code derived from project_files
     recovery_version_id = None
     pre_update_recovery_version_id = None
+    discussion_only_turn = not (result.get('workflow') or {}).get('should_edit_files', True)
     with get_db() as db:
         code_files_touched = any(is_code_file((file_info or {}).get('filename', '')) for file_info in changed_files)
 
         # For simple single-file responses without explicit file writes, persist the
         # generated code into project_files so files remain the source of truth.
-        if result['code'] and not code_files_touched and not write_tools_used:
+        if result['code'] and not discussion_only_turn and not code_files_touched and not write_tools_used:
             persist_generated_code(db, project_id, language, result['code'])
             code_files_touched = True
 

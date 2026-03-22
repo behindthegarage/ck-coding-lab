@@ -7,6 +7,7 @@ Provides read, write, append, and list operations.
 from typing import List, Dict
 
 from database import get_db
+from projects.utils import is_valid_project_filename, normalize_project_filename
 
 
 class FileTools:
@@ -31,6 +32,9 @@ class FileTools:
     
     def read_file(self, filename: str) -> Dict:
         """Read a file from the project."""
+        filename = normalize_project_filename(filename)
+        if not is_valid_project_filename(filename):
+            return {"success": False, "error": "Invalid filename", "filename": filename}
         try:
             with get_db() as db:
                 db.execute('''
@@ -62,6 +66,9 @@ class FileTools:
     
     def write_file(self, filename: str, content: str) -> Dict:
         """Write or overwrite a file in the project."""
+        filename = normalize_project_filename(filename)
+        if not is_valid_project_filename(filename):
+            return {"success": False, "error": "Invalid filename", "filename": filename}
         try:
             with get_db() as db:
                 # Check if file exists
@@ -106,6 +113,9 @@ class FileTools:
     
     def append_file(self, filename: str, content: str) -> Dict:
         """Append content to a file (creates if doesn't exist)."""
+        filename = normalize_project_filename(filename)
+        if not is_valid_project_filename(filename):
+            return {"success": False, "error": "Invalid filename", "filename": filename}
         try:
             with get_db() as db:
                 # Check if file exists

@@ -3,6 +3,7 @@ projects/utils.py - Shared project utilities
 Club Kinawa Coding Lab
 """
 
+import re
 import sqlite3
 from datetime import datetime
 
@@ -172,6 +173,32 @@ def normalize_project_language(language: str) -> str:
 def language_label(language: str) -> str:
     """Return a display-friendly language label."""
     return LANGUAGE_LABELS.get(normalize_project_language(language), 'Starter project')
+
+
+VALID_PROJECT_FILENAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._\-/ ]*[A-Za-z0-9]$')
+SUSPICIOUS_FILENAME_TOKENS = (';', '(', ')', '{', '}', '=>', '<script', 'function ', '\n')
+
+
+def normalize_project_filename(filename: str) -> str:
+    return '/'.join(part for part in (filename or '').strip().replace('\\', '/').split('/') if part not in {'', '.'})
+
+
+def is_valid_project_filename(filename: str) -> bool:
+    normalized = normalize_project_filename(filename)
+    if not normalized:
+        return False
+    if normalized.startswith('/') or '..' in normalized.split('/'):
+        return False
+    if any(token in normalized.lower() for token in SUSPICIOUS_FILENAME_TOKENS):
+        return False
+    if not VALID_PROJECT_FILENAME_RE.match(normalized):
+        return False
+    return all(part and part not in {'.', '..'} for part in normalized.split('/'))
+
+
+def looks_suspicious_project_filename(filename: str) -> bool:
+    normalized = normalize_project_filename(filename)
+    return bool(normalized) and not is_valid_project_filename(normalized)
 
 
 def starter_code_file(language: str):

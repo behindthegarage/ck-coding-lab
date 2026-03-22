@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 
 from ai.tools import FileTools
 from projects.state import choose_primary_code_file
+from projects.utils import is_valid_project_filename, normalize_project_filename
 
 FILE_START_PATTERN = re.compile(
     r'```([A-Za-z0-9_+#.-]+)\s+\[?([^\]\n]+)\]?\s*\n',

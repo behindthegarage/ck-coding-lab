@@ -97,14 +97,16 @@ class AIClient:
                 current_code=current_code,
             )
 
+            enable_tools_for_turn = bool(enable_tools and project_id is not None and workflow_context.get('should_edit_files', True))
+
             # Build messages for the API
             messages_data = self._build_messages(
                 message, conversation_history, current_code,
-                language, project_files, enable_tools, project_id
+                language, project_files, enable_tools_for_turn, project_id
             )
             
             # Call Kimi API
-            response = self._call_kimi(messages_data, enable_tools and project_id is not None)
+            response = self._call_kimi(messages_data, enable_tools_for_turn)
             
             if not response.get("success"):
                 return {

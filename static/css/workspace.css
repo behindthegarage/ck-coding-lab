@@ -680,6 +680,45 @@
 
     .quick-actions {
         gap: 0.5rem;
+        padding-inline: 0.75rem;
+    }
+
+    .chat-input-area {
+        padding: 0.75rem;
+    }
+
+    .input-row {
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+
+    .input-row button {
+        width: 100%;
+    }
+
+    .chat-toolbar.upload-dropzone {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.65rem;
+        padding: 0.75rem;
+    }
+
+    .upload-btn,
+    .upload-copy {
+        width: 100%;
+    }
+
+    .upload-clear {
+        align-self: flex-end;
+    }
+
+    .preview-header,
+    .chat-header {
+        padding-inline: 0.75rem;
+    }
+
+    .preview-controls {
+        flex-wrap: wrap;
     }
 
     .quick-btn {

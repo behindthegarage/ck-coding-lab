@@ -74,6 +74,19 @@ PIVOT_HINTS = (
     'rather than',
 )
 
+DISCUSSION_ONLY_HINTS = (
+    'explain what changed',
+    'explain the change',
+    'explain how this works',
+    'add comments',
+    'give me a tiny task',
+    'tiny change i can make myself',
+    'tell me exactly where to edit',
+    'do not change files',
+    "don't change files",
+    'without changing the code',
+)
+
 GENERIC_DOC_MARKERS = {
     'design.md': (
         '## starter path',
@@ -221,6 +234,7 @@ def analyze_workflow_context(
     fast_path_requested = _contains_any(normalized_message, FAST_PATH_HINTS)
     prototype_requested = _contains_any(normalized_message, PROTOTYPE_HINTS)
     pivot_detected = _contains_any(normalized_message, PIVOT_HINTS)
+    discussion_only = _contains_any(normalized_message, DISCUSSION_ONLY_HINTS)
 
     project_is_fresh = (
         not has_meaningful_code
@@ -261,7 +275,7 @@ def analyze_workflow_context(
         or (mode in {'fast-path', 'prototype-mode'} and generic_doc_count >= 1)
     )
 
-    should_scaffold_now = not should_ask_questions_now and (
+    should_scaffold_now = not discussion_only and not should_ask_questions_now and (
         phase == 'guided-kickoff'
         or mode in {'fast-path', 'prototype-mode'}
         or has_meaningful_code
@@ -290,6 +304,8 @@ def analyze_workflow_context(
         'fast_path_requested': fast_path_requested,
         'prototype_requested': prototype_requested,
         'pivot_detected': pivot_detected,
+        'discussion_only': discussion_only,
+        'should_edit_files': not discussion_only,
         'has_meaningful_code': has_meaningful_code,
         'generic_doc_count': generic_doc_count,
         'custom_doc_count': custom_doc_count,
@@ -319,6 +335,7 @@ def workflow_prompt_block(workflow: Optional[Dict]) -> str:
         f"- Synthesize docs right now: {synthesize_now}",
         f"- Scaffold or keep building right now: {scaffold_now}",
         f"- Keep docs in sync with direction changes: {keep_docs_synced}",
+        f"- Discussion-only turn (avoid editing files): {'yes' if workflow.get('discussion_only') else 'no'}",
         f"- Docs to update when decisions change: {doc_targets}",
         '',
         workflow.get('mode_summary') or MODE_SUMMARIES.get(workflow.get('mode', ''), ''),
@@ -329,6 +346,7 @@ def workflow_prompt_block(workflow: Optional[Dict]) -> str:
         '- If you already have enough context, rewrite `design.md`, `architecture.md`, and `todo.md` with project-specific decisions before you scaffold or expand code.',
         '- Whenever you update those docs, include an explicit plain-language doc update summary so the user knows what changed without opening every file.',
         '- When you do build, explain what changed and why in plain kid-friendly language.',
+        '- If this is a discussion-only turn, do not edit files or emit replacement code unless the user explicitly asks for a change.',
         '- Ask at most one focused follow-up question after a build, and only if the answer will change the next step.',
         '- Support fast requests like "move fast" or "use your judgment" by making reasonable assumptions instead of stalling.',
     ]
