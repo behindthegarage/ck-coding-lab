@@ -968,13 +968,25 @@ function loadFileTree() {
     updateFileSearchUI();
 
     if (projectFiles.length === 0) {
-        container.innerHTML = '<div class="file-loading">No files yet</div>';
+        container.innerHTML = `
+            <div class="workspace-empty-state workspace-empty-state-files">
+                <div class="workspace-empty-icon">📁</div>
+                <div class="workspace-empty-title">No files yet</div>
+                <div class="workspace-empty-copy">Create one from the sidebar, or ask Hari to scaffold the project for you.</div>
+            </div>
+        `;
         return;
     }
 
     if (filteredFiles.length === 0) {
         const safeQuery = escapeHtml(fileSearchQuery.trim());
-        container.innerHTML = `<div class="file-loading">No files match “${safeQuery}”.</div>`;
+        container.innerHTML = `
+            <div class="workspace-empty-state workspace-empty-state-search">
+                <div class="workspace-empty-icon">🔎</div>
+                <div class="workspace-empty-title">No matching files</div>
+                <div class="workspace-empty-copy">Nothing in this project matches “${safeQuery}”. Try a shorter name or clear the search.</div>
+            </div>
+        `;
         return;
     }
 
@@ -1019,11 +1031,27 @@ function setFileModalStatus(message = '', type = 'info') {
     if (!message) {
         status.textContent = '';
         status.className = 'file-modal-status hidden';
+        status.removeAttribute('role');
         return;
     }
 
     status.textContent = message;
     status.className = `file-modal-status ${type}`;
+    status.setAttribute('role', type === 'error' ? 'alert' : 'status');
+}
+
+function setFileModalBusy(isBusy, message = '') {
+    const modal = document.getElementById('file-modal');
+    const editor = document.getElementById('modal-file-editor');
+    if (!modal || !editor) return;
+
+    modal.classList.toggle('file-modal-loading', Boolean(isBusy));
+    modal.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+    editor.classList.toggle('loading', Boolean(isBusy));
+
+    if (message) {
+        setFileModalStatus(message, 'loading');
+    }
 }
 
 function isFileModalDirty() {
@@ -1413,9 +1441,9 @@ async function viewFile(fileId, filename) {
     const modalEditor = document.getElementById('modal-file-editor');
 
     modalFilename.textContent = filename;
-    modalEditor.value = 'Loading...';
+    modalEditor.value = 'Loading…';
     modal.classList.remove('hidden');
-    setFileModalStatus('Loading file...', 'info');
+    setFileModalBusy(true, `Loading ${filename}…`);
     updateFileModalSaveState();
 
     try {
@@ -1427,6 +1455,7 @@ async function viewFile(fileId, filename) {
         if (data && data.success) {
             currentFileOriginalContent = data.file.content || '';
             modalEditor.value = currentFileOriginalContent;
+            setFileModalBusy(false);
             setFileModalStatus('', 'info');
             updateFileModalSaveState();
             modalEditor.focus();
@@ -1436,6 +1465,7 @@ async function viewFile(fileId, filename) {
 
         modalEditor.value = '';
         currentFileOriginalContent = '';
+        setFileModalBusy(false);
         setFileModalStatus(data?.error || 'Error loading file.', 'error');
         updateFileModalSaveState();
     } catch (error) {
@@ -1446,6 +1476,7 @@ async function viewFile(fileId, filename) {
         console.error('Error loading file:', error);
         modalEditor.value = '';
         currentFileOriginalContent = '';
+        setFileModalBusy(false);
         setFileModalStatus(error.message || 'Error loading file.', 'error');
         updateFileModalSaveState();
     }
@@ -1465,7 +1496,7 @@ async function saveCurrentFile() {
     }
 
     fileModalSaving = true;
-    setFileModalStatus('Saving changes...', 'info');
+    setFileModalBusy(true, 'Saving changes…');
     updateFileModalSaveState();
 
     try {
@@ -1475,16 +1506,19 @@ async function saveCurrentFile() {
         });
 
         if (!data || !data.success) {
+            setFileModalBusy(false);
             setFileModalStatus(data?.error || 'Failed to save file.', 'error');
             return;
         }
 
         currentFileOriginalContent = data.file.content || '';
         editor.value = currentFileOriginalContent;
+        setFileModalBusy(false);
         setFileModalStatus('Saved.', 'success');
         await refreshWorkspaceAfterFileSave();
     } catch (error) {
         console.error('Error saving file:', error);
+        setFileModalBusy(false);
         setFileModalStatus(error.message || 'Failed to save file.', 'error');
     } finally {
         fileModalSaving = false;
