@@ -2265,6 +2265,15 @@ async function sendMessage(message) {
     sendBtn.disabled = true;
 
     const messageContent = buildUploadMessage(trimmedMessage);
+    const previewDebugContext = typeof buildPreviewDebugPromptContext === 'function'
+        ? buildPreviewDebugPromptContext(messageContent)
+        : '';
+    const messagePayload = previewDebugContext
+        ? `${messageContent}
+
+${previewDebugContext}`
+        : messageContent;
+
     if (pendingUpload) {
         clearPendingUpload();
     }
@@ -2287,7 +2296,7 @@ async function sendMessage(message) {
             timeout: 120000,
             method: 'POST',
             body: { 
-                message: messageContent, 
+                message: messagePayload, 
                 model: 'kimi-k2.5',
                 enable_tools: true
             }

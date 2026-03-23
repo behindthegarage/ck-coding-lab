@@ -165,6 +165,81 @@ function getPreviewDebugCount() {
     return previewDebugEntries.filter(entry => entry.level === 'error' || entry.level === 'warn').length;
 }
 
+function shouldAttachPreviewDebugContext(message = '') {
+    const normalized = String(message || '').trim().toLowerCase();
+    const hasSignals = getPreviewDebugCount() > 0;
+
+    if (!hasSignals) {
+        return false;
+    }
+
+    if (!normalized) {
+        return true;
+    }
+
+    const debugHints = [
+        'bug',
+        'fix',
+        'error',
+        'debug',
+        'broken',
+        'not work',
+        'not working',
+        'preview',
+        'why',
+        'issue',
+        'problem',
+        'crash',
+        'warning'
+    ];
+
+    return debugHints.some(hint => normalized.includes(hint));
+}
+
+function buildPreviewDebugPromptContext(message = '', maxEntries = 4) {
+    if (!shouldAttachPreviewDebugContext(message)) {
+        return '';
+    }
+
+    const relevantEntries = previewDebugEntries
+        .filter(entry => entry.level === 'error' || entry.level === 'warn')
+        .slice(0, Math.max(1, maxEntries));
+
+    if (relevantEntries.length === 0) {
+        return '';
+    }
+
+    const lines = [
+        '[Auto-attached preview debug context]',
+        `Summary: ${getPreviewDebugSummary()}`,
+        'Use these latest preview/runtime signals to debug before editing:'
+    ];
+
+    relevantEntries.forEach((entry, index) => {
+        lines.push(`${index + 1}. [${String(entry.level || 'error').toUpperCase()}] ${entry.source || 'preview'} — ${entry.message}`);
+        if (entry.context) {
+            const contextLines = String(entry.context)
+                .split('\n')
+                .map(part => part.trim())
+                .filter(Boolean)
+                .slice(0, 3);
+            contextLines.forEach(contextLine => {
+                lines.push(`   ${contextLine}`);
+            });
+        }
+    });
+
+    lines.push('Make real file edits if needed, not just an explanation.');
+
+    const block = lines.join('\n');
+    const maxChars = 1200;
+    if (block.length <= maxChars) {
+        return block;
+    }
+
+    return `${block.slice(0, maxChars - 1)}…`;
+}
+
 function formatPreviewDebugTime(timestamp) {
     return new Date(timestamp).toLocaleTimeString([], {
         hour: 'numeric',
