@@ -22,6 +22,7 @@ from ai.config import (
 from ai.prompts import load_agent_prompt, build_system_prompt
 from ai.tools import FileTools
 from ai.parser import compact_assistant_transcript, parse_response, sanitize_response_text
+from ai.validation import current_code_from_project_files, format_validation_error, validate_javascript_files
 from ai.workflow import analyze_workflow_context
 
 
@@ -66,7 +67,8 @@ class AIClient:
         language: str = "undecided",
         model: str = "kimi-k2.5",
         project_id: int = None,
-        enable_tools: bool = True
+        enable_tools: bool = True,
+        validation_retry: bool = True,
     ) -> Dict:
         """
         Generate code from a user's natural language request.
@@ -154,7 +156,45 @@ class AIClient:
             
             # Combine files from tool calls and parsed text declarations
             all_created_files = tool_created_files + parsed.get("created_files", [])
-            
+            made_potential_code_changes = bool(tool_calls or all_created_files or parsed.get("code"))
+
+            if project_id and validation_retry and enable_tools_for_turn and made_potential_code_changes:
+                updated_project_files = self._load_project_files(project_id)
+                validation_error = validate_javascript_files(updated_project_files, language)
+                if validation_error:
+                    retry_message = (
+                        "The project still has a JavaScript syntax error after your last changes. "
+                        "Fix the actual code so the syntax check passes.\n\n"
+                        f"Original user request:\n{message}\n\n"
+                        f"Validation error:\n{format_validation_error(validation_error)}\n\n"
+                        "Do not just explain the bug. Use the file tools to update the real project files."
+                    )
+                    retry_current_code = current_code_from_project_files(
+                        updated_project_files,
+                        language,
+                        fallback_current_code=current_code,
+                    )
+                    retry_result = self.generate_code(
+                        message=retry_message,
+                        conversation_history=conversation_history,
+                        current_code=retry_current_code,
+                        language=language,
+                        model=model,
+                        project_id=project_id,
+                        enable_tools=enable_tools,
+                        validation_retry=False,
+                    )
+                    if retry_result.get("success"):
+                        retry_result["tool_calls"] = tool_calls + (retry_result.get("tool_calls") or [])
+                        retry_result["created_files"] = all_created_files + (retry_result.get("created_files") or [])
+                        retry_result["tokens_used"] = response.get("tokens_used", 0) + retry_result.get("tokens_used", 0)
+                        retry_result["workflow"] = retry_result.get("workflow") or workflow_context
+                        return retry_result
+
+                    parsed.setdefault("assumptions", []).append(
+                        f"Validation warning: {format_validation_error(validation_error)}"
+                    )
+
             return {
                 "success": True,
                 "code": parsed["code"],
